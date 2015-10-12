@@ -35,6 +35,7 @@ pub mod ghash;
 pub mod hc128;
 pub mod hmac;
 pub mod hkdf;
+pub mod hs1;
 pub mod mac;
 pub mod md5;
 pub mod pbkdf2;
