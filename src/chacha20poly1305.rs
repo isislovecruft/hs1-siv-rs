@@ -25,7 +25,7 @@ impl ChaCha20Poly1305 {
       assert!(key.len() == 16 || key.len() == 32);
       assert!(nonce.len() == 8);
 
-      let mut cipher = ChaCha20::new(key, nonce);
+      let mut cipher = ChaCha20::new(key, nonce, None);
       let mut mac_key = [0u8; 64];
       let zero_key = [0u8; 64];
       cipher.process(&zero_key, &mut mac_key);

@@ -23,6 +23,7 @@ pub struct ChaCha20 {
     state  : ChaChaState,
     output : [u8; 64],
     offset : usize,
+    rounds : i8,
 }
 
 impl Clone for ChaCha20 { fn clone(&self) -> ChaCha20 { *self } }
@@ -85,14 +86,21 @@ static S8:u32x4 = u32x4(8, 8, 8, 8);
 static S7:u32x4 = u32x4(7, 7, 7, 7);
 
 impl ChaCha20 {
-    pub fn new(key: &[u8], nonce: &[u8]) -> ChaCha20 {
+    pub fn new(key: &[u8], nonce: &[u8], rounds: Option<i8>) -> ChaCha20 {
         assert!(key.len() == 16 || key.len() == 32);
         assert!(nonce.len() == 8 || nonce.len() == 12);
 
-        ChaCha20{ state: ChaCha20::expand(key, nonce), output: [0u8; 64], offset: 64 }
+        let roundz: i8;
+        match rounds {
+            Some(r)  => roundz = r,
+            None     => roundz = 20,
+        }
+        assert!(roundz == 8 || roundz == 12 || roundz == 20);
+
+        ChaCha20{ state: ChaCha20::expand(key, nonce), output: [0u8; 64], offset: 64, rounds: roundz }
     }
 
-    pub fn new_xchacha20(key: &[u8], nonce: &[u8]) -> ChaCha20 {
+    pub fn new_xchacha20(key: &[u8], nonce: &[u8], rounds: Option<i8>) -> ChaCha20 {
         assert!(key.len() == 32);
         assert!(nonce.len() == 24);
 
@@ -102,11 +110,20 @@ impl ChaCha20 {
         //  * (x0, x1, x2, x3) is the ChaCha20 constant.
         //  * (x4, x5, ... x11) is a 256 bit key.
         //  * (x12, x13, x14, x15) is a 128 bit nonce.
-        let mut xchacha20 = ChaCha20{ state: ChaCha20::expand(key, &nonce[0..16]), output: [0u8; 64], offset: 64 };
+        let mut xchacha20: ChaCha20;
+        let roundz: i8;
 
+        match rounds {
+            Some(r) => roundz = r,
+            None    => roundz = 20,
+        }
+        assert!(roundz == 8 || roundz == 12 || roundz == 20);
+
+        xchacha20 = ChaCha20{ state: ChaCha20::expand(key, &nonce[0..16]), output: [0u8; 64], offset: 64, rounds: roundz };
         // Use HChaCha to derive the subkey, and initialize a ChaCha20 instance
         // with the subkey and the remaining 8 bytes of the nonce.
         let mut new_key = [0; 32];
+
         xchacha20.hchacha20(&mut new_key);
         xchacha20.state = ChaCha20::expand(&new_key, &nonce[16..24]);
 
@@ -178,7 +195,7 @@ impl ChaCha20 {
 
         // Apply r/2 iterations of the same "double-round" function,
         // obtaining (z0, z1, ... z15) = doubleround r/2 (x0, x1, ... x15).
-        for _ in (0..10) {
+        for _ in (0..self.rounds as i8 / 2) {
             round!(state);
             let u32x4(b10, b11, b12, b13) = state.b;
             state.b = u32x4(b11, b12, b13, b10);
@@ -213,7 +230,7 @@ impl ChaCha20 {
     fn update(&mut self) {
         let mut state = self.state;
 
-        for _ in (0..10) {
+        for _ in (0..self.rounds as i8 / 2) {
             round!(state);
             swizzle!(state.b, state.c, state.d);
             round!(state);
@@ -408,7 +425,7 @@ mod test {
         );
 
         for tv in test_vectors.iter() {
-            let mut c = ChaCha20::new(&tv.key, &tv.nonce);
+            let mut c = ChaCha20::new(&tv.key, &tv.nonce, Some(20));
             let input: Vec<u8> = repeat(0).take(tv.keystream.len()).collect();
             let mut output: Vec<u8> = repeat(0).take(input.len()).collect();
             c.process(&input[..], &mut output[..]);
@@ -452,7 +469,7 @@ mod test {
              0x69, 0x1d, 0x7e, 0xce, 0xc9, 0x3b, 0x75, 0xe6,
              0xe4, 0x18, 0x3a];
 
-        let mut xchacha20 = ChaCha20::new_xchacha20(&key, &nonce);
+        let mut xchacha20 = ChaCha20::new_xchacha20(&key, &nonce, Some(20));
         xchacha20.process(&input, &mut stream);
         assert!(stream[..] == result[..]);
     }
@@ -584,7 +601,7 @@ mod test {
         );
 
         for tv in test_vectors.iter() {
-            let mut c = ChaCha20::new(&tv.key, &tv.nonce);
+            let mut c = ChaCha20::new(&tv.key, &tv.nonce, Some(20));
             let input: Vec<u8> = repeat(0).take(tv.keystream.len()).collect();
             let mut output: Vec<u8> = repeat(0).take(input.len()).collect();
             c.process(&input[..], &mut output[..]);
