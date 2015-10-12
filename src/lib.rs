@@ -6,10 +6,15 @@
 
 #![cfg_attr(feature = "with-bench", feature(test))]
 
+#![feature(bitvec)]   // Required only for Rust < 1.3.0.
+#![feature(append)]   // Required only for Rust < 1.3.0.
+#![feature(str_char)] // Required only for Rust < 1.3.0.
+
 extern crate rand;
 extern crate rustc_serialize as serialize;
 extern crate time;
 extern crate libc;
+extern crate num;
 
 #[cfg(all(test, feature = "with-bench"))]
 extern crate test;
@@ -35,6 +40,7 @@ pub mod ghash;
 pub mod hc128;
 pub mod hmac;
 pub mod hkdf;
+pub mod hs1;
 pub mod mac;
 pub mod md5;
 pub mod pbkdf2;
