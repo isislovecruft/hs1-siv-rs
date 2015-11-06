@@ -105,7 +105,6 @@ pub static HS1_SIV_HI: Parameters = Parameters{b: 64, t:  6, r: 20, l: 32};
 /// library could provide multiple services under a single key by simply partitioning the nonce
 /// space and providing access to HS1.  With the exception of provable security, all of the above
 /// features are improvements over GCM.
-///
 pub struct HS1 {
     /// The parameter set which HS1-SIV was initialised with.
     parameters: Parameters,
@@ -172,7 +171,6 @@ impl HS1 {
 /// 10. kN = toInts(4, T[ChachaLen, NHLen])
 /// 11. kP = map(mod 2^60, toInts(8, T[ChachaLen, + NHLen, PolyLen]))
 /// 12. kA = toInts(8, T[ChachaLen + NHLen + PolyLen, ASULen])
-
 impl Subkeygen for HS1 {
     fn subkeygen(&self, K: &[u8]) -> Key {
         let chachaLen:  usize = 32;
@@ -249,37 +247,14 @@ impl Subkeygen for HS1 {
 /// `HS1_SIV`, `HS1_SIV_HI`).
 ///
 /// # Example
-// XXX rewrite example
 /// ```
-/// use num::pow;
+/// let hs1: HS1     = HS1::new(HS1_SIV_HI);
+/// let k:   Key     = hs1.subkeygen(&([0x01; 32])[..]);
+/// let M:   String  = "foo bar baz qux";
+/// let N:   Vec<u8> = vec!([0u8; 12]);
+/// let y:   i64     = 0;
 ///
-/// let hs1    = &HS1_SIV;
-/// let n_elem = get_kN_length(hs1.parameters);
-/// let mut kS: Vec<i8>         = Vec::with_capacity(32);
-/// let mut kN: Vec<i32>        = Vec::with_capacity(n_elem);
-/// let mut kP: Vec<i64>        = Vec::with_capacity(hs1.parameters.t);
-/// let mut kA: Vec<i64>        = Vec::with_capacity(hs1.parameters.t * 3);
-/// let mut k:  Vec<Vec<isize>> = Vec::with_capacity(4);
-/// let M: String = "foo bar baz qux";
-/// let N: String = "aaaaaaaaaaaa";
-/// let y: i64 = 80507069266;
-///
-/// // Put some static bytes and integers into the test vectors:
-/// for i in 0..32 {
-///     kS.push(0xAA);
-/// }
-/// for i in 0..n_elem {
-///     kN.push(num::pow(2, 32) - 1);
-/// }
-/// for i in 0..hs1.parameters.t {
-///     kP.push(num::pow(2, 60) - 1);
-/// }
-/// for i in 0..hs1.parameters.t * 3 {
-///     kA.push(num::pow(2, 64) - 1);
-/// }
-/// k = vec![KS, kN, kP, KA];
-///
-/// let result = hs1::prf(&k, &M, &N, &y);
+/// let result: Vec<u8> = hs1.prf(&k, &M, &N, &y);
 /// println!("HS1-PRF result is {}", result);
 /// ```
 impl PRF for HS1 {
@@ -342,7 +317,6 @@ impl PRF for HS1 {
 /// 5. h = kP^n + (a_1 × kP^(n-1)) + (a_2 × kP^(n-2)) + … + (a_n × kP^0) mod (2^61 - 1)
 /// 6. if (t ≤ 4) Y = toStr(8, h)
 /// 7. else Y = toStr(4, (kA[0] + kA[1] × (h mod 2^32) + kA[2] × (h div 2 ^32)) div 2^32)
-
 impl Hash for HS1 {
     fn hash(&self, kN: &Vec<u32>, kP: &u64, kA: &Vec<u64>, M: &Vec<u8>) -> Vec<u8> {
         let n:     u32;
@@ -409,7 +383,6 @@ impl Hash for HS1 {
 /// 2. M' = pad(16, A) || pad(16, M) || toStr(8, |A|) || toStr(8, |M|)
 /// 3. T = HS1[b,t,r](k, M', N, l)
 /// 4. C = M ⊕ HS1[b,t,r](k, T, N, 64 + |M|)[64, |M|]
-
 impl Encrypt for HS1 {
     fn encrypt(&self, K: &[u8], M: &String, A: &String, N: &Vec<u8>) -> (String, String) {
         assert!(K.len() <= 32);
@@ -467,7 +440,6 @@ impl Encrypt for HS1 {
 /// 4. T' = HS1[b,t,r](k, M', N, l)
 /// 5. if (T = T') then return M
 /// 6. else return AuthenticationError
-
 impl Decrypt for HS1 {
     fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
                -> Result<String, AuthenticationError> {
@@ -508,11 +480,11 @@ impl Decrypt for HS1 {
 ///  * `input` is a `vec::Vec<u8>` (a.k.a. a vector of octets).
 ///
 /// # Examples
-///
-///     let foo: mut [u8] = [0x41, 0x42, 0x43];
-///     pad(5, foo);
-///     assert_eq!(foo, [0x41, 0x42, 0x43, 0x00, 0x00])
-
+/// ```
+/// let foo: mut [u8] = [0x41, 0x42, 0x43];
+/// pad(5, foo);
+/// assert_eq!(foo, [0x41, 0x42, 0x43, 0x00, 0x00])
+/// ```
 fn pad(multiple: usize, input: &Vec<u8>) -> Vec<u8> {
     let needed:     usize   = input.len() % multiple;
     let mut padded: Vec<u8> = input.clone();
@@ -539,7 +511,6 @@ fn padStr(multiple: usize, input: &String) -> String {
 ///                   i=1 ⎝ + (v1[4i-2]+v2[4i-2]) × (v1[4i]+v2[4i]) ⎠
 ///
 /// where `n = min(|v1|, |v2|)` and is alway a multiple of 4.
-
 fn nh(v1: &Vec<u32>, v2: &Vec<u32>) -> u32 {
     let mut sum: u32   = 0;
     let n:       usize = min(v1.len(), v2.len());
@@ -562,10 +533,11 @@ fn nh(v1: &Vec<u32>, v2: &Vec<u32>) -> u32 {
 /// interpreting each chunk as as an unsigned integer.
 ///
 /// # Example:
-///
-///     let result: Vec<u32> = toInts(2, 0x05000600);
-///     assert!(Some(result.first) == 5);
-///     assert!(Some(result.last)  == 6);
+/// ```
+/// let result: Vec<u32> = toInts(2, 0x05000600);
+/// assert!(Some(result.first) == 5);
+/// assert!(Some(result.last)  == 6);
+/// ```
 // XXX see i64::from_str_radix()
 fn toInts4(S: &Vec<u8>) -> Vec<u32> {
     assert_eq!(S.len() % 4, 0); // The string should be some multiple of 4 bytes
@@ -603,9 +575,9 @@ fn toInts8(S: &Vec<u8>) -> Vec<u64> {
 /// `toStr(n, x)` is the n-byte unsigned little-endian binary representation of integer x.
 ///
 /// # Example
-///
+/// ```
 /// assert!(toStr(2, 3) == 0x0300);
-///
+/// ```
 fn toStr <'a> (n: usize, x: &'a u64) -> String {
     let y: String = x.to_le().to_string();
     padStr(n, &y)
@@ -633,6 +605,10 @@ fn take32 <'a> (x: &'a [u8]) -> [u8; 32] {
      x[24], x[25], x[26], x[27],
      x[28], x[29], x[30], x[31]]
 }
+
+//-------------------------------------------------------------------------------------------------
+//                                          Tests
+//-------------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
