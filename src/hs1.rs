@@ -69,6 +69,12 @@ pub static HS1_SIV_LO: Parameters = Parameters{b: 64, t:  2, r:  8, l:  8};
 pub static    HS1_SIV: Parameters = Parameters{b: 64, t:  4, r: 12, l: 16};
 pub static HS1_SIV_HI: Parameters = Parameters{b: 64, t:  6, r: 20, l: 32};
 
+/// HS1-SIV uses a new PRF called HS1 to provide authenticated encryption via Rogaway and
+/// Shrimpton’s SIV mode [6].  HS1 (mnemonic for “Hash-Stream 1”) is designed for high software
+/// speed on systems with good 32-bit processing, including Intel SSE, ARM Neon, and 32-bit
+/// architectures without SIMD support. HS1 uses a universal hash function to consume arbitrary
+/// strings and a stream cipher to produce its output.
+///
 /// # Features
 ///
 /// HS1-SIV is designed to have the following features.
@@ -99,55 +105,32 @@ pub static HS1_SIV_HI: Parameters = Parameters{b: 64, t:  6, r: 20, l: 32};
 /// space and providing access to HS1.  With the exception of provable security, all of the above
 /// features are improvements over GCM.
 ///
-/// # References
-///
-/// [1]: Daniel Bernstein. ChaCha, a variant of Salsa20.
-///        Workshop Record of SASC 2008: The State of the Art of Stream Ciphers. ECRYPT, 2008.
-///        Also available at http://cr.yp.to/chacha.html.
-///
-/// [2]: Daniel Bernstein. The Salsa20 family of stream ciphers.
-///        In: New stream cipher designs: the eSTREAM finalists. Springer 2008.
-///        Also available at http://cr.yp.to/snuffle.html.
-///
-/// [3]: John Black, Shai Halevi, Hugo Krawczyk, Ted Krovetz and Phillip Rogaway. UMAC: Fast and secure message authentication.
-///        Advances in Cryptology (CRYPTO 1999), Springer, 1999.
-///        Also available at http://krovetz.net/csus.
-///
-/// [4]: Ted Krovetz. Message authentication on 64-bit architectures.
-///        Selected Areas of Cryptography (SAC 2006), Springer, 2007.
-///        Also available at http://krovetz.net/csus.
-///
-/// [5]: Yoav Nir and Adam Langley. ChaCha20 and Poly1305 for IETF protocols.
-///        IETF Internet Draft. http://datatracker.ietf.org/doc/draft-nir-cfrg-chacha20-poly1305.
-///        Accessed 15 March 2014.
-///
-/// [6]: Phillip Rogaway and Tom Shrimpton. Deterministic Authenticated-Encryption: A Provable-Security Treatment of the Keywrap Problem.
-///        EUROCRYPT 2006. Springer, 2006.
-///        Also available at http://www.cs.ucdavis.edu/~rogaway/papers.
-///
 pub struct HS1 {
+    /// The parameter set which HS1-SIV was initialised with.
     parameters: Parameters,
+    /// An instance of the ChaCha fast stream cipher, used internally for subkey derivation.
     chacha: ChaCha20,
+    /// Symmetric authentication-encryption key material.
     key: Key,
 }
 
-trait Subkeygen {
+pub trait Subkeygen {
     fn subkeygen(&self, K: &[u8]) -> Key;
 }
 
-trait PRF {
+pub trait PRF {
     fn prf(&self, k: &Key, M: &String, N: &Vec<u8>, y: i64) -> Vec<u8>;
 }
 
-trait Hash {
+pub trait Hash {
     fn hash(&self, kN: &Vec<u32>, kP: &u64, kA: &Vec<u64>, M: &Vec<u8>) -> Vec<u8>;
 }
 
-trait Encrypt {
+pub trait Encrypt {
     fn encrypt(&self, K: &[u8], M: &String, A: &String, N: &Vec<u8>) -> (String, String);
 }
 
-trait Decrypt {
+pub trait Decrypt {
     fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
                -> Result<String, AuthenticationError>;
 }
@@ -165,38 +148,41 @@ impl HS1 {
     }
 }
 
+/// HS1-Subkeygen takes any length key and uses ChaCha to produce all internal keys needed by HS1.
+///
+/// # Inputs
+///
+/// - `K`, a non-empty string of up to 32 bytes
+///
+/// # Output
+///
+/// - `k`, a vector `(KS, kN, kP, kA)`, where:
+///   - `kS`, is a string of 32 bytes,
+///   - `kN`, is a vector of `b/4 + 4(t-1)` integers from ℤ_2^32,
+///   - `kP`, is a vector of `t` integers from ℤ_2^60, and
+///   - `kA`, is a vector of `3t` integers from ℤ_2^64,
+///
+/// # Algorithm
+///
+/// 1. ChachaLen = 32
+/// 2. NHLen = b + 16(t-1)
+/// 3. PolyLen = 8t
+/// 4. ASULen = 24t
+/// 5. y = ChachaLen + NHLen + PolyLen + ASULen
+/// 6. K' = (K || K || K || K || …)[0, 32]
+/// 7. N = toStr(12, b*2^48 + t*2^40 + r*2^32 + l*2^16 + |K|)
+/// 8. T = Chacha[r](K', 0, N, 0^y)`, where:
+///    - K' is a 32-byte key,
+///    - 0 is the initial counter value,
+///    - N is a 12-byte IV, and
+///    - 0^y is a y-byte string comprised entirely of `0`s, which will be encrypted to
+///      produce the new subkey.
+/// 9.  kS = T[0, ChachaLen]
+/// 10. kN = toInts(4, T[ChachaLen, NHLen])
+/// 11. kP = map(mod 2^60, toInts(8, T[ChachaLen, + NHLen, PolyLen]))
+/// 12. kA = toInts(8, T[ChachaLen + NHLen + PolyLen, ASULen])
+
 impl Subkeygen for HS1 {
-    /// HS1-Subkeygen takes any length key and uses ChaCha to produce all internal keys needed by HS1.
-    ///
-    /// # Inputs
-    ///     * `K`, a non-empty string of up to 32 bytes
-    ///
-    /// # Output
-    ///     * `k`, a vector `(KS, kN, kP, kA)`, where
-    ///         - `kS`, is a string of 32 bytes,
-    ///         - `kN`, is a vector of `b/4 + 4(t-1)` integers from ℤ_2^32,
-    ///         - `kP`, is a vector of `t` integers from ℤ_2^60, and
-    ///         - `kA`, is a vector of `3t` integers from ℤ_2^64,
-    ///
-    /// # Algorithm
-    ///     1. `ChachaLen = 32`
-    ///     2. `NHLen = b + 16(t-1)`
-    ///     3. `PolyLen = 8t`
-    ///     4. `ASULen = 24t`
-    ///     5. `y = ChachaLen + NHLen + PolyLen + ASULen`
-    ///     6. `K' = (K || K || K || K || …)[0, 32]`
-    ///     7. `N = toStr(12, b*2^48 + t*2^40 + r*2^32 + l*2^16 + |K|)`
-    ///     8. `T = Chacha[r](K', 0, N, 0^y)`, where
-    ///           * `K'` is a 32-byte key,
-    ///           * `0` is the initial counter value,
-    ///           * `N` is a 12-byte IV, and
-    ///           * `0^y` is a y-byte string comprised entirely of `0`s, which will be encrypted to
-    ///              produce the new subkey.
-    ///     9.  `kS = T[0, ChachaLen]`
-    ///     10. `kN = toInts(4, T[ChachaLen, NHLen])`
-    ///     11. `kP = map(mod 2^60, toInts(8, T[ChachaLen, + NHLen, PolyLen]))`
-    ///     12. `kA = toInts(8, T[ChachaLen + NHLen + PolyLen, ASULen])
-    ///
     fn subkeygen(&self, K: &[u8]) -> Key {
         let chachaLen:  usize = 32;
         let nhLen:      usize = self.parameters.b as usize + 16 * (self.parameters.t as usize - 1);
@@ -240,71 +226,72 @@ impl Subkeygen for HS1 {
     }
 }
 
-/// XXX_QUESTION: The equation of step #2 in the paper appears to be missing a parenthesis.
+// XXX_QUESTION: The equation of step #2 in the paper appears to be missing a parenthesis.
 
+/// Hash `M` a total of `t` times with different keys and combine the result with the stream
+/// cipher’s key.
+///
+/// # Inputs
+///
+/// - `k`, a vector `(KS, kN, kP, kA)`, where
+///   - `kS`, is a string of 32 bytes,
+///   - `kN`, is a vector of `b/4 + 4(t-1)` integers from ℤ_2^32,
+///   - `kP`, is a vector of `t` integers from ℤ_2^60, and
+///   - `kA`, is a vector of `3t` integers from ℤ_2^64,
+/// - `M`, a string of any length,
+/// - `N`, a 12-byte string,
+/// - `y`, a integer in ℤ_2^38
+///
+/// # Output
+///
+/// - `Y`, a string of `y` bytes
+///
+/// # Algorithm
+///
+/// 1. A_i = HS1-Hash[b,t](kN[4i, b/4], kP[i], kA[3i, 3], M) for each 0 ≤ i < t
+/// 2. Y   = ChaCha[r](pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)
+///
+/// # Side Channels
+///
+/// An adversary with the ability to conduct timing-based side channel attacks on a machine running
+/// this code will some advantage to determine the `Parameter` set used (i.e. `HS1_SIV_LO`,
+/// `HS1_SIV`, `HS1_SIV_HI`).
+///
+/// # Example
+// XXX rewrite example
+/// ```
+/// use num::pow;
+///
+/// let hs1    = &HS1_SIV;
+/// let n_elem = get_kN_length(hs1.parameters);
+/// let mut kS: Vec<i8>         = Vec::with_capacity(32);
+/// let mut kN: Vec<i32>        = Vec::with_capacity(n_elem);
+/// let mut kP: Vec<i64>        = Vec::with_capacity(hs1.parameters.t);
+/// let mut kA: Vec<i64>        = Vec::with_capacity(hs1.parameters.t * 3);
+/// let mut k:  Vec<Vec<isize>> = Vec::with_capacity(4);
+/// let M: String = "foo bar baz qux";
+/// let N: String = "aaaaaaaaaaaa";
+/// let y: i64 = 80507069266;
+///
+/// // Put some static bytes and integers into the test vectors:
+/// for i in 0..32 {
+///     kS.push(0xAA);
+/// }
+/// for i in 0..n_elem {
+///     kN.push(num::pow(2, 32) - 1);
+/// }
+/// for i in 0..hs1.parameters.t {
+///     kP.push(num::pow(2, 60) - 1);
+/// }
+/// for i in 0..hs1.parameters.t * 3 {
+///     kA.push(num::pow(2, 64) - 1);
+/// }
+/// k = vec![KS, kN, kP, KA];
+///
+/// let result = hs1::prf(&k, &M, &N, &y);
+/// println!("HS1-PRF result is {}", result);
+/// ```
 impl PRF for HS1 {
-    /// Hash M a total of t times with different keys and combine the result
-    /// with the stream cipher’s key.
-    ///
-    /// # Inputs
-    ///     * `k`, a vector `(KS, kN, kP, kA)`, where
-    ///         - `kS`, is a string of 32 bytes,
-    ///         - `kN`, is a vector of `b/4 + 4(t-1)` integers from ℤ_2^32,
-    ///         - `kP`, is a vector of `t` integers from ℤ_2^60, and
-    ///         - `kA`, is a vector of `3t` integers from ℤ_2^64,
-    ///     * `M`, a string of any length,
-    ///     * `N`, a 12-byte string,
-    ///     * `y`, a integer in ℤ_2^38
-    ///
-    /// # Output
-    ///     * `Y`, a string of y bytes
-    ///
-    /// # Algorithm
-    ///     1. `A_i = HS1-Hash[b,t](kN[4i, b/4], kP[i], kA[3i, 3], M) for each 0 ≤ i < t`
-    ///     2. `Y   = ChaCha[r](pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)`
-    ///
-    /// # Side Channels
-    ///
-    /// An adversary with the ability to conduct differential power analysis side channel attacks on a
-    /// machine running this code XXX
-    ///
-    /// An adversary with the ability to conduct timing-based side channel attacks on a machine running
-    /// this code *will very likely* be able to determine if the `Parameter` set used
-    /// (i.e. `HS1_SIV_LO`, `HS1_SIV`, `HS1_SIV_HI`).
-    ///
-    /// # Example
-    /// ```
-    /// use num::pow;
-    ///
-    /// let hs1    = &HS1_SIV;
-    /// let n_elem = get_kN_length(hs1.parameters);
-    /// let mut kS: Vec<i8>         = Vec::with_capacity(32);
-    /// let mut kN: Vec<i32>        = Vec::with_capacity(n_elem);
-    /// let mut kP: Vec<i64>        = Vec::with_capacity(hs1.parameters.t);
-    /// let mut kA: Vec<i64>        = Vec::with_capacity(hs1.parameters.t * 3);
-    /// let mut k:  Vec<Vec<isize>> = Vec::with_capacity(4);
-    /// let M: String = "foo bar baz qux";
-    /// let N: String = "aaaaaaaaaaaa";
-    /// let y: i64 = 80507069266;
-    /// 
-    /// // Put some static bytes and integers into the test vectors:
-    /// for i in 0..32 {
-    ///     kS.push(0xAA);
-    /// }
-    /// for i in 0..n_elem {
-    ///     kN.push(num::pow(2, 32) - 1);
-    /// }
-    /// for i in 0..hs1.parameters.t {
-    ///     kP.push(num::pow(2, 60) - 1);
-    /// }
-    /// for i in 0..hs1.parameters.t * 3 {
-    ///     kA.push(num::pow(2, 64) - 1);
-    /// }
-    /// k = vec![KS, kN, kP, KA];
-    ///
-    /// let result = hs1::prf(&k, &M, &N, &y);
-    /// println!("HS1-PRF result is {}", result);
-    /// ```
     fn prf(&self, k: &Key, M: &String, N: &Vec<u8>, y: i64) -> Vec<u8> {
         assert_eq!(N.len(), 12);
 
@@ -336,39 +323,42 @@ impl PRF for HS1 {
     }
 }
 
-/// XXX_QUESTION: In step #5 of HS1-SIV-Hash, it is written `kP ^ (n-1)`, etc.  However in the notation
-/// section of the paper, it says:
+// XXX_QUESTION: In step #5 of HS1-SIV-Hash, it is written `kP ^ (n-1)`, etc.  However in the notation
+// section of the paper, it says:
+//
+// > A string of k zero-bytes is represented 0^k.
+//
+// Are we supposed to raise the vector `kP` to the power of `(n-1)`, or are we supposed to take
+// that many bytes from the vector?
+
+/// The hash family HS1-Hash is `(1/2^(28) + l/b2^(60))-AU` for all `M` up to `l` bytes, when
+/// `k_N` and `k_P` are chosen randomly and `t ≤ 4`.
 ///
-/// > A string of k zero-bytes is represented 0^k.
+/// The hash family is `(1/2^(28) + 1/2^(32) + l/b2^(60))-SU` when additionally `k_A` is
+/// randomly chosen and `t > 4`.
 ///
-/// Are we supposed to raise the vector `kP` to the power of `(n-1)`, or are we supposed to take
-/// that many bytes from the vector?
+/// # Inputs
+///
+/// - `kN`, is a vector of `b/4` integers from ℤ_2^32,
+/// - `kP`, is an integer from ℤ_2^60,
+/// - `kA`, is a vector of 3 integers from ℤ_2^64,
+/// - `M`, a string of any length.
+///
+/// # Output
+///
+/// - `Y`, an 8-byte (if t ≤ 4) or 4-byte (if t > 4) string.
+///
+/// # Algorithm:
+///
+/// 1. n = max(⌈|M|/b⌉, 1)
+/// 2. M_1 || M_2 || … || M_n = M and |M_i| = b for each 1 ≤ i ≤ n.
+/// 3. m_i = toInts(4, pad(16, M_i)) for each 1 ≤ i ≤ n.
+/// 4. a_i = NH(kN, m_i) mod 2^60 + (|M_i| mod 16) for each 1 ≤ i ≤ n.
+/// 5. h = kP^n + (a_1 × kP^(n-1)) + (a_2 × kP^(n-2)) + … + (a_n × kP^0) mod (2^61 - 1)
+/// 6. if (t ≤ 4) Y = toStr(8, h)
+/// 7. else Y = toStr(4, (kA[0] + kA[1] × (h mod 2^32) + kA[2] × (h div 2 ^32)) div 2^32)
 
 impl Hash for HS1 {
-    /// The hash family HS1-Hash is `(1/2^(28) + l/b2^(60))-AU` for all `M` up to `l` bytes, when
-    /// `k_N` and `k_P` are chosen randomly and `t ≤ 4`.
-    ///
-    /// The hash family is `(1/2^(28) + 1/2^(32) + l/b2^(60))-SU` when additionally `k_A` is
-    /// randomly chosen and `t > 4`.
-    ///
-    /// # Inputs
-    ///     - `kN`, is a vector of `b/4` integers from ℤ_2^32,
-    ///     - `kP`, is an integer from ℤ_2^60,
-    ///     - `kA`, is a vector of 3 integers from ℤ_2^64,
-    ///     - `M`, a string of any length.
-    ///
-    /// # Output
-    ///     * `Y`, an 8-byte (if t ≤ 4) or 4-byte (if t > 4) string.
-    ///
-    /// # Algorithm:
-    ///     1. `n = max(⌈|M|/b⌉, 1)`
-    ///     2. `M_1 || M_2 || … || M_n = M and |M_i| = b for each 1 ≤ i ≤ n.`
-    ///     3. `m_i = toInts(4, pad(16, M_i)) for each 1 ≤ i ≤ n.`
-    ///     4. `a_i = NH(kN, m_i) mod 2^60 + (|M_i| mod 16) for each 1 ≤ i ≤ n.`
-    ///     5. `h = kP^n + (a_1 × kP^(n-1)) + (a_2 × kP^(n-2)) + … + (a_n × kP^0) mod (2^61 - 1)`
-    ///     6. `if (t ≤ 4) Y = toStr(8, h)`
-    ///     7. `else Y = toStr(4, (kA[0] + kA[1] × (h mod 2^32) + kA[2] × (h div 2 ^32)) div 2^32)`
-    ///
     fn hash(&self, kN: &Vec<u32>, kP: &u64, kA: &Vec<u64>, M: &Vec<u8>) -> Vec<u8> {
         let n:     u32;
         let Mi:    Chunks<u8>;
@@ -413,26 +403,29 @@ impl Hash for HS1 {
     }
 }
 
+/// The `l`-byte string `T` serves as authenticator for `A` and `M`, and serves as IV for the
+/// encryption of `M`.  If `N` is a nonce, then repeat encryptions yield different `T` and `C`.
+/// Algorithm parameters `b`, `t`, `r`, and `l` effect security and performance.
+///
+/// # Inputs
+///
+/// - `K`, a non-empty string of up to 32 bytes,
+/// - `M`, a string shorter than 2^64 bytes,
+/// - `A`, a string shorter than 2^64 bytes,
+/// - `N`, a 12-byte string
+///
+/// # Output
+///
+/// - `(T, C)`, strings of `l` and `|M|` bytes, respectively.
+///
+/// # Algorithm:
+///
+/// 1. k = HS1-subkeygen[b,t,r,l](K)
+/// 2. M' = pad(16, A) || pad(16, M) || toStr(8, |A|) || toStr(8, |M|)
+/// 3. T = HS1[b,t,r](k, M', N, l)
+/// 4. C = M ⊕ HS1[b,t,r](k, T, N, 64 + |M|)[64, |M|]
+
 impl Encrypt for HS1 {
-    /// The `l`-byte string `T` serves as authenticator for `A` and `M`, and serves as IV for the
-    /// encryption of `M`.  If `N` is a nonce, then repeat encryptions yield different `T` and `C`.
-    /// Algorithm parameters `b`, `t`, `r`, and `l` effect security and performance.
-    ///
-    /// # Inputs
-    ///     - `K`, a non-empty string of up to 32 bytes,
-    ///     - `M`, a string shorter than 2^64 bytes,
-    ///     - `A`, a string shorter than 2^64 bytes,
-    ///     - `N`, a 12-byte string
-    ///
-    /// # Output
-    ///     - `(T, C)`, strings of `l` and `|M|` bytes, respectively.
-    ///
-    /// # Algorithm:
-    ///     1. `k = HS1-subkeygen[b,t,r,l](K)`
-    ///     2. `M' = pad(16, A) || pad(16, M) || toStr(8, |A|) || toStr(8, |M|)`
-    ///     3. `T = HS1[b,t,r](k, M', N, l)`
-    ///     4. `C = M ⊕ HS1[b,t,r](k, T, N, 64 + |M|)[64, |M|]`
-    ///
     fn encrypt(&self, K: &[u8], M: &String, A: &String, N: &Vec<u8>) -> (String, String) {
         assert!(K.len() <= 32);
         assert!(M.len() <  2usize.pow(64));
@@ -440,7 +433,7 @@ impl Encrypt for HS1 {
         assert!(N.len() == 12);
 
         let k:       Key = self.subkeygen(&K);
-        let m:  String;
+        let m:       String;
         let C:       String;
         let T:       String;
         let t:       Vec<u8>;
@@ -464,30 +457,33 @@ impl Encrypt for HS1 {
     }
 }
 
-/// XXX_QUESTION: In the "Algorithm" section of Fig.5: Decryption, the numbering got all wonky.
+// XXX_QUESTION: In the "Algorithm" section of Fig.5: Decryption, the numbering got all wonky.
+
+/// The `l`-byte string `T` serves as authenticator for `A` and `M`, and serves as IV for the
+/// decryption of `C`. Algorithm parameters `b`, `t`, `r`, and `l` effect security and
+/// performance.
+///
+/// # Inputs:
+///
+/// - `K`, a non-empty string of up to 32 bytes,
+/// - `(T, C)`, an `l`-byte string and a string shorter than 2^64 bytes, respectively.
+/// - `A`, a string shorter than 2^64 bytes,
+/// - `N`, a 12-byte string
+///
+/// # Output
+///
+/// - `M`, a `|C|`-byte string, or `AuthenticationError`.
+///
+/// # Algorithm:
+///
+/// 1. k = HS1-subkeygen[b,t,r,l](K)
+/// 2. M = C ⊕ HS1[b,t,r](k, T, N, 64 + |C|)[64, |C|]
+/// 3. M' = pad(16, A) || pad(16, M) || toStr(8, |A|) || toStr(8, |M|)
+/// 4. T' = HS1[b,t,r](k, M', N, l)
+/// 5. if (T = T') then return M
+/// 6. else return AuthenticationError
 
 impl Decrypt for HS1 {
-    /// The `l`-byte string `T` serves as authenticator for `A` and `M`, and serves as IV for the
-    /// decryption of `C`. Algorithm parameters `b`, `t`, `r`, and `l` effect security and
-    /// performance.
-    ///
-    /// # Inputs:
-    ///     - `K`, a non-empty string of up to 32 bytes,
-    ///     - `(T, C)`, an `l`-byte string and a string shorter than 2^64 bytes, respectively.
-    ///     - `A`, a string shorter than 2^64 bytes,
-    ///     - `N`, a 12-byte string
-    ///
-    /// # Output
-    ///     - `M`, a `|C|`-byte string, or `AuthenticationError`.
-    ///
-    /// # Algorithm:
-    ///     1. `k = HS1-subkeygen[b,t,r,l](K)`
-    ///     2. `M = C ⊕ HS1[b,t,r](k, T, N, 64 + |C|)[64, |C|]`
-    ///     3. `M' = pad(16, A) || pad(16, M) || toStr(8, |A|) || toStr(8, |M|)`
-    ///     4. `T' = HS1[b,t,r](k, M', N, l)`
-    ///     5. `if (T = T') then return M`
-    ///     6. `else return AuthenticationError`
-    ///
     fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
                -> Result<String, AuthenticationError> {
         assert!(K.len() <= 32);
@@ -531,8 +527,8 @@ impl Decrypt for HS1 {
 ///     let foo: mut [u8] = [0x41, 0x42, 0x43];
 ///     pad(5, foo);
 ///     assert_eq!(foo, [0x41, 0x42, 0x43, 0x00, 0x00])
-///
-pub fn pad(multiple: usize, input: &Vec<u8>) -> Vec<u8> {
+
+fn pad(multiple: usize, input: &Vec<u8>) -> Vec<u8> {
     let needed:     usize   = input.len() % multiple;
     let mut padded: Vec<u8> = input.clone();
 
@@ -568,7 +564,7 @@ fn padStr(multiple: usize, input: &String) -> String {
 ///                   i=1 ⎝ + (v1[4i-2]+v2[4i-2]) × (v1[4i]+v2[4i]) ⎠
 ///
 /// where `n = min(|v1|, |v2|)` and is alway a multiple of 4.
-///
+
 fn nh(v1: &Vec<u32>, v2: &Vec<u32>) -> u32 {
     let mut sum: u32   = 0;
     let n:       usize = min(v1.len(), v2.len());
