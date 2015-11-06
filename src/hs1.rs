@@ -26,11 +26,12 @@ pub struct AuthenticationError;
 
 /// HS1-SIV key material.
 ///
-/// A Key, `k`, is a vector `(kS, kN, kP, kA)`, where:
-///     * `kS`, is a string of 32 bytes,
-///     * `kN`, is a vector of `b/4 + 4(t-1)` integers from ℤ_2^32,
-///     * `kP`, is a vector of `t` integers from ℤ_2^60, and
-///     * `kA`, is a vector of `3t` integers from ℤ_2^64,
+/// A Key is a vector `(kS, kN, kP, kA)`, where:
+///
+/// * `kS`, is a string of 32 bytes,
+/// * `kN`, is a vector of `b/4 + 4(t-1)` integers from ℤ_2^32,
+/// * `kP`, is a vector of `t` integers from ℤ_2^60, and
+/// * `kA`, is a vector of `3t` integers from ℤ_2^64,
 #[derive(Clone)]
 pub struct Key{
     S: [u8; 32],
