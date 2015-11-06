@@ -141,9 +141,9 @@ impl HS1 {
     pub fn new(params: Parameters, k: Key, n: &[u8]) -> HS1 {
         let rounds: Option<i8> = Some(params.r as i8);
 
-        assert!(k.N.len() == (params.b / 4) as usize + (4 * (params.t - 1)) as usize);
-        assert!(k.P.len() == params.t as usize);
-        assert!(k.A.len() == params.t as usize * 3);
+        assert_eq!(k.N.len(), (params.b / 4) as usize + (4 * (params.t - 1)) as usize);
+        assert_eq!(k.P.len(), params.t as usize);
+        assert_eq!(k.A.len(), params.t as usize * 3);
 
         HS1{ parameters: params, chacha: ChaCha20::new(&k.S, &n, rounds), key: k }
     }
@@ -205,7 +205,7 @@ impl Subkeygen for HS1 {
             }
             kPrime = take32(&kVec[..]);
         }
-        assert!(kPrime.len() == 32);
+        assert_eq!(kPrime.len(), 32);
 
         N = toStr(12, &(self.parameters.b as u64 * 2u64.pow(48) +
                         self.parameters.t as u64 * 2u64.pow(40) +
@@ -215,7 +215,7 @@ impl Subkeygen for HS1 {
         N.truncate(12);
 
         ChaCha20::new(&kPrime, &[0u8], Some(self.parameters.r as i8)).process(&N[..], &mut out[..]);
-        assert!(out.len() == y); // XXX check that chacha is really returning y bytes to us
+        assert_eq!(out.len(), y); // XXX check that chacha is really returning y bytes to us
 
         Key {
             // XXX oh god… the syntax of .. all over the place in this section is fucking horrible.
@@ -445,8 +445,8 @@ impl Encrypt for HS1 {
                       &self.prf(&k, &T, &N, (64 + M.len()) as i64)[..]);
         C = String::from_utf8(out.to_vec()).unwrap();
 
-        assert!(T.len() == self.parameters.l as usize);
-        assert!(C.len() == M.len());
+        assert_eq!(T.len(), self.parameters.l as usize);
+        assert_eq!(C.len(), M.len());
 
         (T, C)
     }
@@ -576,10 +576,9 @@ fn nh(v1: &Vec<u32>, v2: &Vec<u32>) -> u32 {
 ///     let result: Vec<u32> = toInts(2, 0x05000600);
 ///     assert!(Some(result.first) == 5);
 ///     assert!(Some(result.last)  == 6);
-///
 // XXX see i64::from_str_radix()
 fn toInts4(S: &Vec<u8>) -> Vec<u32> {
-    assert!(S.len() % 4 == 0); // The string should be some multiple of 4 bytes
+    assert_eq!(S.len() % 4, 0); // The string should be some multiple of 4 bytes
 
     let mut ints: Vec<u32> = Vec::new();
 
@@ -596,7 +595,7 @@ fn toInts4(S: &Vec<u8>) -> Vec<u32> {
 
 // TODO: Can we make this generic to the above toInts4() function?
 fn toInts8(S: &Vec<u8>) -> Vec<u64> {
-    assert!(S.len() % 8 == 0); // The string should be some multiple of 8 bytes
+    assert_eq!(S.len() % 8, 0); // The string should be some multiple of 8 bytes
 
     let mut ints: Vec<u64> = Vec::new();
 
