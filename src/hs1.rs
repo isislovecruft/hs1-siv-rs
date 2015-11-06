@@ -313,12 +313,6 @@ impl PRF for HS1 {
         // 2. `Y   = ChaCha[r](pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)`
         xor_keystream(&mut key, &pad(32, &A), &k.S[..]);
         ChaCha20::new(&key, &[0u8], Some(self.parameters.r as i8)).process(&N[..], &mut out[..]);
-
-        //let padded = pad(32, A);
-        //// Expand the key: // XXX do we need to do this?  it's done in chacha20::ChaCha20::new().
-        ////self.chacha.expand(&kS, &N);
-        //xor_keystream(&mut input, &padded, &k.S[..]);
-        //self.chacha.process(&input, &mut out[..]);
         out.to_vec()
     }
 }
@@ -547,16 +541,6 @@ fn padStr(multiple: usize, input: &String) -> String {
     String::from_utf8(pad(multiple, &i)).unwrap()
 }
 
-//pub fn pad<T>(multiple: usize, input: T) -> T
-//    where T: Clone + Sized + Extend<u8>
-//{
-//    let needed: usize = input.len() % multiple;
-//    let padded: T     = input.clone();
-//
-//    padded.extend([0x00; ..needed].iter());
-//    padded
-//}
-
 /// Given vectors of integers, `v1` and `v2`, returns the result of the following algorithm:
 ///
 ///                   n/4 ⎛                                         ⎞
@@ -632,14 +616,6 @@ fn toInts8(S: &Vec<u8>) -> Vec<u64> {
 ///
 /// assert!(toStr(2, 3) == 0x0300);
 ///
-//impl<T> ToString for T where T: Add + Sub + Mul + Div + Sized { // XXX `Unsize` or `?Sized`?
-//    fn to_string(&self: &T, n: usize) -> String {
-//        &pad(n, self.to_le())[..]
-//    }
-//}
-//fn toStr <'a> (n: usize, x: &'a u64) -> &[u8] {
-    //let y: Vec<u8> = x.to_le().to_string().into_bytes();
-    //&pad(n, y)[..]
 fn toStr <'a> (n: usize, x: &'a u64) -> String {
     let y: String = x.to_le().to_string();
     padStr(n, &y)
