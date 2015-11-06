@@ -202,7 +202,7 @@ impl Subkeygen for HS1 {
                         K.len() as u64)).into_bytes();
         N.truncate(12);
 
-        ChaCha20::new(&kPrime, &[0u8], Some(self.parameters.r as i8)).process(&N[..], &mut out[..]);
+        ChaCha20::new(&kPrime, &[0u8; 12], Some(self.parameters.r as i8)).process(&N[..], &mut out[..]);
         assert_eq!(out.len(), y); // XXX check that chacha is really returning y bytes to us
 
         Key {
