@@ -221,7 +221,7 @@ impl Subkeygen for HS1 {
 
         Key {
             // XXX oh god… the syntax of .. all over the place in this section is fucking horrible.
-            S: take32(&out[..chachaLen]),  // XXX would be nice to remove the take32() here…
+            S: take32(&out[..chachaLen]),
             N: toInts4(&out[chachaLen..][..nhLen].to_vec()),
             P: toInts8(&out[chachaLen + nhLen..][..polyLen].to_vec()).iter().map(|x| *x % 2u64.pow(60)).collect(),
             A: toInts8(&out[chachaLen + nhLen + polyLen..][..asuLen].to_vec()),
