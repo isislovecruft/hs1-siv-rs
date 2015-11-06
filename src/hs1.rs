@@ -643,3 +643,22 @@ fn take32 <'a> (x: &'a [u8]) -> [u8; 32] {
      x[24], x[25], x[26], x[27],
      x[28], x[29], x[30], x[31]]
 }
+
+#[cfg(test)]
+mod tests {
+    use hs1::{HS1_SIV_LO, HS1_SIV, HS1_SIV_HI};
+    use hs1::{HS1, AuthenticationError, Key};
+    use hs1::{Subkeygen, Encrypt, Decrypt, PRF};
+
+    static test_key_32_bytes: [u8; 32] = [
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+        0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24,
+        0x25, 0x26, 0x27, 0x28, 0x29, 0x30, 0x31, 0x32,];
+
+    #[test]
+    fn test_hs1_siv_hi_init() {
+        let key: Key = HS1::subkeygen(test_key_32_bytes);
+        let hs1: HS1 = HS1::new(HS1_SIV_HI, key, &[0u8]);
+    }
+}
