@@ -109,10 +109,6 @@ pub static HS1_SIV_HI: Parameters = Parameters{b: 64, t:  6, r: 20, l: 32};
 pub struct HS1 {
     /// The parameter set which HS1-SIV was initialised with.
     parameters: Parameters,
-    // An instance of the ChaCha fast stream cipher, used internally for subkey derivation.
-    //chacha: ChaCha20,
-    // Symmetric authentication-encryption key material.
-    //key: Key,
 }
 
 pub trait Subkeygen {
@@ -138,14 +134,6 @@ pub trait Decrypt {
 
 impl HS1 {
     /// Initialise a new HS1 cipher and it's underlying ChaCha cipher and state.
-    // pub fn new(params: Parameters, key: &[u8], nonce: &[u8]) -> HS1 {
-    //     let rounds: Option<i8> = Some(params.r as i8);
-    //     let hs1:    HS1        = HS1{ parameters: params };
-    //     let k:      Key        = HS1::subkeygen(key);
-    // 
-    //     hs1.chacha = ChaCha20::new(&k.S, &nonce, rounds);
-    //     hs1
-    // }
     pub fn new(parameters: Parameters) -> HS1 {
         HS1{ parameters: parameters }
     }
