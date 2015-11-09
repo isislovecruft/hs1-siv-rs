@@ -10,7 +10,6 @@
 
 use std::cmp::min;
 use std::iter::{Extend, repeat};
-use std::mem::transmute;
 use std::result::Result;
 use std::slice::Chunks;
 use std::vec::Vec;
@@ -548,7 +547,7 @@ fn toInts4(S: &Vec<u8>) -> Vec<u32> {
         let chunks: Chunks<u8> = S.chunks(4);
         for chunk in chunks {
             let fixed: [u8; 4] = take4(chunk);
-            let mutated: u32 = transmute::<[u8; 4], u32>(fixed);
+            let mutated: u32 = std::mem::transmute::<[u8; 4], u32>(fixed);
             ints.push(mutated);
         }
     }
@@ -565,7 +564,7 @@ fn toInts8(S: &Vec<u8>) -> Vec<u64> {
         let chunks: Chunks<u8> = S.chunks(8);
         for chunk in chunks {
             let fixed: [u8; 8] = take8(chunk);
-            let mutated: u64 = transmute::<[u8; 8], u64>(fixed);
+            let mutated: u64 = std::mem::transmute::<[u8; 8], u64>(fixed);
             ints.push(mutated);
         }
     }
