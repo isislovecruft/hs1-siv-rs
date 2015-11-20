@@ -1,8 +1,16 @@
-// XXX Pick a license
+// To the extent possible under law, Isis Agora Lovecruft has waived all copyright and related or
+// neighboring rights to hs1-siv-rs, using the Creative Commons "CC0" public domain dedication.
+// See <http://creativecommons.org/publicdomain/zero/1.0/> for full details.
 //
 // Authors: Isis Agora Lovecruft <isis@en.ciph.re> 0xA3ADB67A2CDB8B35
 
-/*! A reference implementation of the HS1-SIV symmetric, authenticated-encryption cipher. */
+/*! A reference implementation of the HS1-SIV authenticated-encryption cipher.
+ *
+ * WARNING: **REFERENCE IMPLEMENTATION** MEANS **FOR REFERENCE ONLY**.  The author is quite
+ * certain that this implementation is quite vulnerable to several types of side channels, e.g. due
+ * to modular exponentiation via Rust's pow() method (which uses a naïve add-and-multiply
+ * algorithm), as well as branching/conditionals on secret data.  **USE AT YOUR OWN RISK**.
+ */
 
 // We use variable and function names from the HS1-SIV paper throughout this implementation, most
 // of which do not conform to Rust's standard of using snake case.
