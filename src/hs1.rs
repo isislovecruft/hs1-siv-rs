@@ -31,12 +31,29 @@ pub struct AuthenticationError;
 /// * `kN`, is a vector of `b/4 + 4(t-1)` integers from ℤ_2^32,
 /// * `kP`, is a vector of `t` integers from ℤ_2^60, and
 /// * `kA`, is a vector of `3t` integers from ℤ_2^64,
-#[derive(Clone)]
-pub struct Key{
+#[derive(Clone, Eq)]
+pub struct Key {
     S: [u8; 32],
     N: Vec<u32>,
     P: Vec<u64>,
     A: Vec<u64>,
+}
+
+impl std::fmt::Debug for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "S: {:?},\nN: {:?},\nA: {:?},\nP: {:?}\n", self.S, self.N, self.A, self.P)
+    }
+}
+
+impl PartialEq for Key {
+    #[inline]
+    fn eq(&self, other: &Key) -> bool {
+        if (self.S != other.S) | (self.N != other.N) | (self.P != other.P) | (self.A != other.A) {
+            false
+        } else {
+            true
+        }
+    }
 }
 
 /// Parameters for initialising HS1-SIV with established levels of varying security and efficiency.
