@@ -488,6 +488,8 @@ impl Decrypt for HS1 {
 //                                      Utility Functions
 //-------------------------------------------------------------------------------------------------
 
+// TODO:  WTF, Rust?  Is there really no way to `use` a non-pub function within a doctest?
+
 /// Pad the `input` to the given `length` by adding 0s to the end of the `input`.
 ///
 /// # Inputs
@@ -548,40 +550,101 @@ fn nh(v1: &Vec<u32>, v2: &Vec<u32>) -> u32 {
 /// Returns a vector of integers obtained by breaking `S` into `n`-byte chunks and little-endian
 /// interpreting each chunk as as an unsigned integer.
 ///
-/// # Example:
-/// ```
-/// let result: Vec<u32> = toInts(2, 0x05000600);
+/// # Example
+/// ```ignored
+/// let result: Vec<u32> = toInts4(0x05000600);
+///
 /// assert!(Some(result.first) == 5);
 /// assert!(Some(result.last)  == 6);
 /// ```
 // XXX see i64::from_str_radix()
-fn toInts4(S: &Vec<u8>) -> Vec<u32> {
+pub fn toInts4(S: &Vec<u8>) -> Vec<u32> {
     assert_eq!(S.len() % 4, 0); // The string should be some multiple of 4 bytes
 
+    //let hasint: u64 = u64::from_str_radix(&h[..], 2).unwrap();
+    //println!("h = {:?} ({:?})", h, h.as_bytes());
+    //println!("hasint = {:?}", hasint);
     let mut ints: Vec<u32> = Vec::new();
 
     unsafe {
         let chunks: Chunks<u8> = S.chunks(4);
         for chunk in chunks {
-            let fixed: [u8; 4] = take4(chunk);
-            let mutated: u32 = std::mem::transmute::<[u8; 4], u32>(fixed);
-            ints.push(mutated);
+            ints.push(std::mem::transmute::<[u8; 4], u32>([chunk[0].to_le(),
+                                                           chunk[1].to_le(),
+                                                           chunk[2].to_le(),
+                                                           chunk[3].to_le()]).to_le());
+            //let mutated: u32 = u32::from_str_radix(&String::from(*chunk)[..], 2).unwrap();
+            //let s: &str = &format!("{:?}", chunk);
+            //println!("s = {}", s);
+            //let mutated: u32 = u32::from_str_radix(s, 2).unwrap();
         }
     }
+
+    // let chunks: Chunks<u8> = S.chunks(4);
+    // for chunk in chunks {
+    //     let mut vector: Vec<u8> = Vec::with_capacity(4);
+    // 
+    //     for byte in chunk {
+    //         vector.push(*byte);
+    //     }
+    //     vector.retain(|x| *x != 0);
+    // 
+    //     //let stringish: String = String::from_utf8(vector).unwrap();
+    //     let filtered: &str = &String::from_utf8(vector).unwrap()[..];
+    //     let mutated: u32 = u32::from_str_radix(filtered, 2).unwrap();
+    // 
+    //     ints.push(mutated);
+    // }
     ints
 }
+// pub fn toInts4(S: &Vec<u8>) -> Vec<u32> {
+//     assert_eq!(S.len() % 4, 0); // The string should be some multiple of 4 bytes
+//     
+//     println!("toInts4({:?})", S);
+// 
+//     let mut ints: Vec<u32> = Vec::new();
+//     let mut s:    Vec<u8>  = S.clone();
+//     let chunks:   std::slice::ChunksMut<u8> = s.chunks_mut(4);
+//     //let mut index: u32 = 0;
+// 
+//     unsafe {
+//         for chunk in chunks {
+//             chunk.reverse();
+//             println!("chunk is now: {:?}", chunk); // XXX
+// 
+//             let mutated: u32 = std::mem::transmute::<[u8; 4], u32>(take4(chunk));
+//             ints.push(mutated)
+//         }
+//     }
+//         //let mut vector: Vec<u8> = Vec::with_capacity(4);
+//         //for byte in chunk {
+//         //    vector.push(*byte);
+//         //}
+//         //vector.retain(|x| *x != 0);
+//         //vector.extend(chunk.iter().reverse()).retain(|x| *x != 0);
+// 
+//     //    //let stringish: String = String::from_utf8(vector).unwrap();
+//     //    let filtered: &str = &String::from_utf8(vector).unwrap()[..];
+//     //    let mutated: u32 = u32::from_str_radix(filtered, 2).unwrap();
+//     //    ints.push(mutated);
+// 
+//     //for (start, end) in [index .. S.len() as u32 - 4].iter().zip([index + 4 .. S.len() as u32].iter()) {
+//     //    index = index + 4;
+//     //}
+// 
+//     ints
+// }
 
 // TODO: Can we make this generic to the above toInts4() function?
-fn toInts8(S: &Vec<u8>) -> Vec<u64> {
+pub fn toInts8(S: &Vec<u8>) -> Vec<u64> {
     assert_eq!(S.len() % 8, 0); // The string should be some multiple of 8 bytes
 
     let mut ints: Vec<u64> = Vec::new();
+    let chunks: Chunks<u8> = S.chunks(8);
 
     unsafe {
-        let chunks: Chunks<u8> = S.chunks(8);
         for chunk in chunks {
-            let fixed: [u8; 8] = take8(chunk);
-            let mutated: u64 = std::mem::transmute::<[u8; 8], u64>(fixed);
+            let mutated: u64 = std::mem::transmute::<[u8; 8], u64>(take8(chunk));
             ints.push(mutated);
         }
     }
@@ -592,11 +655,38 @@ fn toInts8(S: &Vec<u8>) -> Vec<u64> {
 ///
 /// # Example
 /// ```
-/// assert!(toStr(2, 3) == 0x0300);
+/// use crypto::hs1::toStr;
+///
+/// let result: String = toStr(2, &3u64);
+/// assert_eq!(result, [03, 00]);
 /// ```
-fn toStr <'a> (n: usize, x: &'a u64) -> String {
-    let y: String = x.to_le().to_string();
-    padStr(n, &y)
+//pub fn toStr <'a> (n: usize, x: &'a u64) -> String {
+//    let y: String = x.to_le().to_string();
+//    padStr(n, &y)
+//}
+//pub fn toStr <'a> (n: usize, x: &'a u64) -> String {
+//    let s: String = format!("{:b}", x.to_le());
+//    padStr(n, &s)
+//}
+pub fn toStr <'a> (n: usize, x: &'a u64) -> Vec<u8> {
+    let mut remains: u64     = x.to_le();
+    let mut v:       Vec<u8> = Vec::new();
+
+    while remains > 0 {
+        if remains > 2u64.pow(8) - 1 { // If it's larger than what we can store in a u8,
+            v.push(255u8);             // then push 11111111b to the stack.
+            remains = remains - 255;
+        } else {        
+            v.push(remains as u8);     // Otherwise, just push the remainer.
+            remains = remains - remains;
+        }
+    }
+    v.reverse();                      // "little endianise"
+    while n > v.len() {               // Now push some padding bytes until we reach
+        v.push(0u8);                  // the right size.
+    }
+    println!("v: {:?}", v);
+    v
 }
 
 fn take4  <'a> (x: &'a [u8]) -> [u8; 4] {
