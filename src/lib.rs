@@ -6,10 +6,15 @@
 
 #![cfg_attr(feature = "with-bench", feature(test))]
 
+#![feature(bitvec)]   // Required only for Rust < 1.3.0.
+#![feature(append)]   // Required only for Rust < 1.3.0.
+#![feature(str_char)] // Required only for Rust < 1.3.0.
+
 extern crate rand;
 extern crate rustc_serialize as serialize;
 extern crate time;
 extern crate libc;
+extern crate num;
 
 #[cfg(all(test, feature = "with-bench"))]
 extern crate test;

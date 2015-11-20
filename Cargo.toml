@@ -24,4 +24,4 @@ libc = "*"
 time = "*"
 rand = "*"
 rustc-serialize = "*"
-
+num = "*"

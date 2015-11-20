@@ -8,7 +8,9 @@
 // of which do not conform to Rust's standard of using snake case.
 #![allow(non_snake_case)]
 
+use std;
 use std::cmp::min;
+use std::collections::BitVec;
 use std::iter::{Extend, repeat};
 use std::result::Result;
 use std::slice::Chunks;
@@ -211,11 +213,11 @@ impl Subkeygen for HS1 {
         }
         assert_eq!(kPrime.len(), 32);
 
-        N = toStr(12, &(self.parameters.b as u64 * 2u64.pow(48) +
-                        self.parameters.t as u64 * 2u64.pow(40) +
-                        self.parameters.r as u64 * 2u64.pow(32) +
-                        self.parameters.l as u64 * 2u64.pow(16) +
-                        K.len() as u64)).into_bytes();
+        N = toStr(12, &((self.parameters.b * 2u8.pow(48) +
+                         self.parameters.t * 2u8.pow(40) +
+                         self.parameters.r * 2u8.pow(32) +
+                         self.parameters.l * 2u8.pow(16) +
+                         K.len() as u8) as usize)).unwrap(); // XXX error handling
         N.truncate(12);
 
         ChaCha20::new(&kPrime, &[0u8; 12], Some(self.parameters.r as i8)).process(&N[..], &mut out[..]);
@@ -347,10 +349,8 @@ impl Hash for HS1 {
         Mi = M.chunks(self.parameters.b as usize);
 
         // 3. m_i = toInts(4, pad(16, M_i)) for each 1 ≤ i ≤ n.
-        for (chunk, _) in Mi.enumerate() {
-            let padded: Vec<u8>  = pad(16, &vec!(chunk as u8));
-            let mi:     Vec<u32> = toInts4(&padded);
-
+        for (_, chunk) in Mi.enumerate() {
+            let mi: Vec<u32> = toInts4(&pad(16, &chunk.to_vec())).unwrap();
             // 4. a_i = NH(kN, m_i) mod 2^60 + (|M_i| mod 16) for each 1 ≤ i ≤ n.
             a.push(&nh(kN, &mi) % 2u32.pow(60) + (self.parameters.b as u32 % 16));
         }
@@ -364,14 +364,15 @@ impl Hash for HS1 {
 
         // 6. if (t ≤ 4) Y = toStr(8, h)
         if self.parameters.t <= 4 {
-            Y = toStr(8, &h).into_bytes();
+            Y = toStr(8, &(h.to_u64().unwrap() as usize)).unwrap(); // XXX error handling
             Y.truncate(8);
         } else {
-            // 7. else Y = toStr(4, (kA[0] + kA[1] × (h mod 2^32) + kA[2] × (h div 2 ^32)) div 2^32)
+        // 7. else Y = toStr(4, (kA[0] + kA[1] × (h mod 2^32) + kA[2] × (h div 2 ^32)) div 2^32)
             let modulus: u64 = 2u64.pow(32);
-            Y = toStr(4, &((kA.get(0).unwrap() +
-                            kA.get(1).unwrap() * (h % modulus) +
-                            kA.get(2).unwrap() * (h / modulus)) / modulus)).into_bytes();
+            Y = toStr(4, &(((u64toBI!(kA[0].clone()) +
+                             u64toBI!(kA[1].clone()) * (h.clone() % m.clone()) +
+                             u64toBI!(kA[2].clone()) * (h.clone() / m.clone())) / m.clone())
+                           .to_u64().unwrap() as usize)).unwrap(); // XXX error handling
             Y.truncate(4);
         }
         Y
@@ -415,8 +416,8 @@ impl Encrypt for HS1 {
 
         m = [padStr(16, &A),
              padStr(16, &M),
-             toStr(8, &(A.len() as u64)),
-             toStr(8, &(M.len() as u64))].concat();
+             String::from_utf8(toStr(8, &A.len()).unwrap()).unwrap(), // XXX should these be vectors instead?
+             String::from_utf8(toStr(8, &M.len()).unwrap()).unwrap()].concat(); // XXX error handling ←↑
 
         t = self.prf(&k, &m, &N, self.parameters.l as i64);
         T = String::from_utf8(t).unwrap();
@@ -476,8 +477,8 @@ impl Decrypt for HS1 {
         M = String::from_utf8(out.to_vec()).unwrap();
         m = [padStr(16, &A),
              padStr(16, &M),
-             toStr(8, &(A.len() as u64)),
-             toStr(8, &(M.len() as u64))].concat();
+             String::from_utf8(toStr(8, &A.len()).unwrap()).unwrap(), //XXX error handling ←↓
+             String::from_utf8(toStr(8, &M.len()).unwrap()).unwrap()].concat(); //XXX
         t = String::from_utf8(self.prf(&k, &m, N, self.parameters.l as i64)).unwrap();
 
         if *T == *t { Ok(M) } else { Err(AuthenticationError) }
@@ -488,7 +489,13 @@ impl Decrypt for HS1 {
 //                                      Utility Functions
 //-------------------------------------------------------------------------------------------------
 
-// TODO:  WTF, Rust?  Is there really no way to `use` a non-pub function within a doctest?
+#[derive(Debug, Clone, Copy)]
+pub enum ConversionError {
+    /// Raised if there was some problem calling either `toInts4()` or `toInts8()` on a `String`.
+    StrToInt,
+    /// Raised if there was some problem calling either `toStr()` on an integer.
+    IntToStr,
+}
 
 /// Pad the `input` to the given `length` by adding 0s to the end of the `input`.
 ///
@@ -522,171 +529,107 @@ fn padStr(multiple: usize, input: &String) -> String {
     String::from_utf8(pad(multiple, &i)).unwrap()
 }
 
-/// Given vectors of integers, `v1` and `v2`, returns the result of the following algorithm:
-///
-///                   n/4 ⎛                                         ⎞
-///     NH(v1, v2) =   Σ  ⎜(v1[4i-3]+v2[4i-3]) × (v1[4i-1]+v2[4i-1])⎟
-///                   i=1 ⎝ + (v1[4i-2]+v2[4i-2]) × (v1[4i]+v2[4i]) ⎠
-///
-/// where `n = min(|v1|, |v2|)` and is alway a multiple of 4.
-fn nh(v1: &Vec<u32>, v2: &Vec<u32>) -> u32 {
-    let mut sum: u32   = 0;
-    let n:       usize = min(v1.len(), v2.len());
-
-    for i in 1..n/4 {
-        let a1: &u32 = v1.get(4 * i - 3).unwrap();
-        let a2: &u32 = v2.get(4 * i - 3).unwrap();
-        let b1: &u32 = v1.get(4 * i - 1).unwrap();
-        let b2: &u32 = v2.get(4 * i - 1).unwrap();
-        let c1: &u32 = v1.get(4 * i - 2).unwrap();
-        let c2: &u32 = v2.get(4 * i - 2).unwrap();
-        let d1: &u32 = v1.get(4 * i).unwrap();
-        let d2: &u32 = v2.get(4 * i).unwrap();
-        sum += (a1 + a2) * (b1 + b2) + (c1 + c2) * (d1 + d2);
-    }
-    sum
-}
-
-/// Returns a vector of integers obtained by breaking `S` into `n`-byte chunks and little-endian
-/// interpreting each chunk as as an unsigned integer.
-///
-/// # Example
-/// ```ignored
-/// let result: Vec<u32> = toInts4(0x05000600);
-///
-/// assert!(Some(result.first) == 5);
-/// assert!(Some(result.last)  == 6);
-/// ```
-// XXX see i64::from_str_radix()
-pub fn toInts4(S: &Vec<u8>) -> Vec<u32> {
-    assert_eq!(S.len() % 4, 0); // The string should be some multiple of 4 bytes
-
-    //let hasint: u64 = u64::from_str_radix(&h[..], 2).unwrap();
-    //println!("h = {:?} ({:?})", h, h.as_bytes());
-    //println!("hasint = {:?}", hasint);
-    let mut ints: Vec<u32> = Vec::new();
-
-    unsafe {
-        let chunks: Chunks<u8> = S.chunks(4);
-        for chunk in chunks {
-            ints.push(std::mem::transmute::<[u8; 4], u32>([chunk[0].to_le(),
-                                                           chunk[1].to_le(),
-                                                           chunk[2].to_le(),
-                                                           chunk[3].to_le()]).to_le());
-            //let mutated: u32 = u32::from_str_radix(&String::from(*chunk)[..], 2).unwrap();
-            //let s: &str = &format!("{:?}", chunk);
-            //println!("s = {}", s);
-            //let mutated: u32 = u32::from_str_radix(s, 2).unwrap();
-        }
-    }
-
-    // let chunks: Chunks<u8> = S.chunks(4);
-    // for chunk in chunks {
-    //     let mut vector: Vec<u8> = Vec::with_capacity(4);
-    // 
-    //     for byte in chunk {
-    //         vector.push(*byte);
-    //     }
-    //     vector.retain(|x| *x != 0);
-    // 
-    //     //let stringish: String = String::from_utf8(vector).unwrap();
-    //     let filtered: &str = &String::from_utf8(vector).unwrap()[..];
-    //     let mutated: u32 = u32::from_str_radix(filtered, 2).unwrap();
-    // 
-    //     ints.push(mutated);
-    // }
-    ints
-}
-// pub fn toInts4(S: &Vec<u8>) -> Vec<u32> {
-//     assert_eq!(S.len() % 4, 0); // The string should be some multiple of 4 bytes
-//     
-//     println!("toInts4({:?})", S);
-// 
-//     let mut ints: Vec<u32> = Vec::new();
-//     let mut s:    Vec<u8>  = S.clone();
-//     let chunks:   std::slice::ChunksMut<u8> = s.chunks_mut(4);
-//     //let mut index: u32 = 0;
-// 
-//     unsafe {
-//         for chunk in chunks {
-//             chunk.reverse();
-//             println!("chunk is now: {:?}", chunk); // XXX
-// 
-//             let mutated: u32 = std::mem::transmute::<[u8; 4], u32>(take4(chunk));
-//             ints.push(mutated)
-//         }
-//     }
-//         //let mut vector: Vec<u8> = Vec::with_capacity(4);
-//         //for byte in chunk {
-//         //    vector.push(*byte);
-//         //}
-//         //vector.retain(|x| *x != 0);
-//         //vector.extend(chunk.iter().reverse()).retain(|x| *x != 0);
-// 
-//     //    //let stringish: String = String::from_utf8(vector).unwrap();
-//     //    let filtered: &str = &String::from_utf8(vector).unwrap()[..];
-//     //    let mutated: u32 = u32::from_str_radix(filtered, 2).unwrap();
-//     //    ints.push(mutated);
-// 
-//     //for (start, end) in [index .. S.len() as u32 - 4].iter().zip([index + 4 .. S.len() as u32].iter()) {
-//     //    index = index + 4;
-//     //}
-// 
-//     ints
-// }
-
-// TODO: Can we make this generic to the above toInts4() function?
-pub fn toInts8(S: &Vec<u8>) -> Vec<u64> {
-    assert_eq!(S.len() % 8, 0); // The string should be some multiple of 8 bytes
-
-    let mut ints: Vec<u64> = Vec::new();
-    let chunks: Chunks<u8> = S.chunks(8);
-
-    unsafe {
-        for chunk in chunks {
-            let mutated: u64 = std::mem::transmute::<[u8; 8], u64>(take8(chunk));
-            ints.push(mutated);
-        }
-    }
-    ints
-}
-
 /// `toStr(n, x)` is the n-byte unsigned little-endian binary representation of integer x.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use crypto::hs1::toStr;
 ///
-/// let result: String = toStr(2, &3u64);
-/// assert_eq!(result, [03, 00]);
+/// let s1: Vec<u8> = toStr(4, &3).unwrap();
+/// assert!(vec![0, 0, 0, 3] == s1);
+///
+/// let s2: Vec<u8> = toStr(4, &256).unwrap();
+/// assert!(vec![0, 0, 1, 0] == s2);
+///
+/// let s3: Vec<u8> = toStr(4, &4294967295).unwrap();
+/// assert!(vec![255, 255, 255, 255] == s3);
 /// ```
-//pub fn toStr <'a> (n: usize, x: &'a u64) -> String {
-//    let y: String = x.to_le().to_string();
-//    padStr(n, &y)
-//}
-//pub fn toStr <'a> (n: usize, x: &'a u64) -> String {
-//    let s: String = format!("{:b}", x.to_le());
-//    padStr(n, &s)
-//}
-pub fn toStr <'a> (n: usize, x: &'a u64) -> Vec<u8> {
-    let mut remains: u64     = x.to_le();
-    let mut v:       Vec<u8> = Vec::new();
+pub fn toStr<'a>(n: usize, x: &'a usize) -> Result<Vec<u8>, ConversionError> {
+    let s: String = format!("{:b}", x.to_le());
 
-    while remains > 0 {
-        if remains > 2u64.pow(8) - 1 { // If it's larger than what we can store in a u8,
-            v.push(255u8);             // then push 11111111b to the stack.
-            remains = remains - 255;
-        } else {        
-            v.push(remains as u8);     // Otherwise, just push the remainer.
-            remains = remains - remains;
+    if n * 8 - s.len() > usize::max_value() {
+        return Err(ConversionError::IntToStr);
+    }
+
+    let mut p: BitVec = BitVec::from_elem(n * 8 - s.len(), false);
+    let mut b: BitVec = BitVec::from_fn(s.len(), |i| { s.char_at(i) == '1' });
+    
+    p.append(&mut b);
+    Ok(p.to_bytes())
+}
+
+/// Returns a vector of integers obtained by breaking `S` into 4-byte chunks and little-endian
+/// interpreting each chunk as as an unsigned integer.
+///
+/// # Examples
+/// ```
+/// use crypto::hs1::toInts4;
+///
+/// let result: Vec<u32> = toInts4(&vec![0, 0, 0, 3]).unwrap();
+/// assert!(result[0] == 3u32);
+///
+/// let another: Vec<u32> = toInts4(&vec![0, 0, 0, 5, 0, 0, 0, 6]).unwrap();
+/// assert!(another[0] == 5u32);
+/// assert!(another[1] == 6u32);
+///
+/// let and_another: Vec<u32> = toInts4(&vec![0, 0, 1, 0]).unwrap();
+/// assert!(and_another[0] == 256u32);
+///
+/// let yet_another: Vec<u32> = toInts4(&vec![255, 255, 255, 255]).unwrap();
+/// assert!(yet_another[0] == 4294967295u32);
+/// ```
+pub fn toInts4(S: &Vec<u8>) -> Result<Vec<u32>, ConversionError> {
+    if S.len() % 4 !=  0 {
+        println!("The length of S in bytes must be some multiple of 4.");
+        return Err(ConversionError::StrToInt);
+    }
+    let mut ints: Vec<u32> = Vec::new();
+
+    unsafe {
+        let chunks: std::slice::Chunks<u8> = S.chunks(4);
+        for c in chunks {
+            ints.push(std::mem::transmute::<[u8; 4], u32>([c[0], c[1], c[2], c[3]]).to_be());
         }
     }
-    v.reverse();                      // "little endianise"
-    while n > v.len() {               // Now push some padding bytes until we reach
-        v.push(0u8);                  // the right size.
+    Ok(ints)
+}
+
+/// Returns a vector of integers obtained by breaking `S` into 8-byte chunks and little-endian
+/// interpreting each chunk as as an unsigned integer.
+///
+/// # Examples
+/// ```
+/// use crypto::hs1::toInts8;
+///
+/// let result: Vec<u64> = toInts8(&vec![0, 0, 0, 0, 0, 0, 0, 3]).unwrap();
+/// assert!(result[0] == 3u64);
+///
+/// let another: Vec<u64> = toInts8(&vec![0, 0, 0, 5, 0, 0, 0, 6, 255, 255, 255, 255, 0, 0, 1, 0]).unwrap();
+/// println!("another = {:?}", another);
+/// assert!(another[0] == 21474836486u64);
+/// assert!(another[1] == 18446744069414584576u64);
+///
+/// let and_another: Vec<u64> = toInts8(&vec![0, 0, 0, 0, 0, 0, 1, 0]).unwrap();
+/// assert!(and_another[0] == 256u64);
+///
+/// let yet_another: Vec<u64> = toInts8(&vec![255, 255, 255, 255, 255, 255, 255, 255]).unwrap();
+/// assert!(yet_another[0] == 18446744073709551615u64);
+/// ```
+pub fn toInts8(S: &Vec<u8>) -> Result<Vec<u64>, ConversionError> {
+    if S.len() % 8 !=  0 {
+        println!("The length of S in bytes must be some multiple of 8.");
+        return Err(ConversionError::StrToInt);
     }
-    println!("v: {:?}", v);
-    v
+    let mut ints: Vec<u64> = Vec::new();
+
+    unsafe {
+        let chunks: std::slice::Chunks<u8> = S.chunks(8);
+        for c in chunks {
+            ints.push(std::mem::transmute::<[u8; 8], u64>([c[0], c[1], c[2], c[3],
+                                                           c[4], c[5], c[6], c[7]]).to_be());
+        }
+    }
+    Ok(ints)
 }
 
 fn take4  <'a> (x: &'a [u8]) -> [u8; 4] {
@@ -731,6 +674,36 @@ mod tests {
         println!("kN: {:?}", &key.N[..]);
         println!("kP: {:?}", &key.P[..]);
         println!("kA: {:?}", &key.A[..]);
+
+    #[test]
+    fn test_hs1_toStr_toInts4_3() {
+        let orig: usize = 3;
+        assert_eq!(toInts4(&toStr(4, &orig).unwrap()).unwrap()[0], orig as u32);
+    }
+    #[test]
+    fn test_hs1_toStr_toInts4_256() {
+        let orig: usize = 256;
+        assert_eq!(toInts4(&toStr(4, &orig).unwrap()).unwrap()[0], orig as u32);
+    }
+    #[test]
+    fn test_hs1_toStr_toInts4_4294967295() {
+        let orig: usize = 4294967295;
+        assert_eq!(toInts4(&toStr(4, &orig).unwrap()).unwrap()[0], orig as u32);
+    }
+    #[test]
+    fn test_hs1_toStr_toInts8_3() {
+        let orig: usize = 3;
+        assert_eq!(toInts8(&toStr(8, &orig).unwrap()).unwrap()[0], orig as u64);
+    }
+    #[test]
+    fn test_hs1_toStr_toInts8_256() {
+        let orig: usize = 256;
+        assert_eq!(toInts8(&toStr(8, &orig).unwrap()).unwrap()[0], orig as u64);
+    }
+    #[test]
+    fn test_hs1_toStr_toInts8_18446744073709551615() {
+        let orig: usize = 18446744073709551615;
+        assert_eq!(toInts8(&toStr(8, &orig).unwrap()).unwrap()[0], orig as u64);
     }
 
     #[test]
