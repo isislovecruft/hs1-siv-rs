@@ -204,9 +204,11 @@ impl Subkeygen for HS1 {
         let polyLen:    usize =  8 * self.parameters.t as usize;
         let asuLen:     usize = 24 * self.parameters.t as usize;
         let y:          usize = chachaLen + nhLen + polyLen + asuLen;
+        let mut chacha: ChaCha20;
         let mut kPrime: [u8; 32];
         let mut N:      Vec<u8>;
-        let mut out:    Vec<u8> = repeat(0).take(y).collect();
+        let mut input:  Vec<u8> = repeat(0).take(y).collect();
+        let mut output: Vec<u8> = repeat(0).take(y).collect();
 
         if K.len() >= 32 {
             kPrime = take32(K);
@@ -221,22 +223,23 @@ impl Subkeygen for HS1 {
         }
         assert_eq!(kPrime.len(), 32);
 
-        N = toStr(12, &((self.parameters.b * 2u8.pow(48) +
-                         self.parameters.t * 2u8.pow(40) +
-                         self.parameters.r * 2u8.pow(32) +
-                         self.parameters.l * 2u8.pow(16) +
-                         K.len() as u8) as usize)).unwrap(); // XXX error handling
+        N = toStr(12, &((self.parameters.b as u64 * 2u64.pow(48) +
+                         self.parameters.t as u64 * 2u64.pow(40) +
+                         self.parameters.r as u64 * 2u64.pow(32) +
+                         self.parameters.l as u64 * 2u64.pow(16) +
+                         K.len() as u64) as usize)).unwrap(); // XXX error handling
         N.truncate(12);
 
-        ChaCha20::new(&kPrime, &[0u8; 12], Some(self.parameters.r as i8)).process(&N[..], &mut out[..]);
-        assert_eq!(out.len(), y); // XXX check that chacha is really returning y bytes to us
+        chacha = ChaCha20::new(&kPrime, &N[..], Some(self.parameters.r as i8));
+        chacha.process(&mut input[..], &mut output[..]);
 
+        // XXX Ugh… the .. syntax all over the place in this section is horribly unreadable.
         Key {
-            // XXX oh god… the syntax of .. all over the place in this section is fucking horrible.
-            S: take32(&out[..chachaLen]),
-            N: toInts4(&out[chachaLen..][..nhLen].to_vec()),
-            P: toInts8(&out[chachaLen + nhLen..][..polyLen].to_vec()).iter().map(|x| *x % 2u64.pow(60)).collect(),
-            A: toInts8(&out[chachaLen + nhLen + polyLen..][..asuLen].to_vec()),
+            S: take32(&output[..chachaLen]),
+            N: toInts4(&output[chachaLen..][..nhLen].to_vec()).unwrap(),
+            P: toInts8(&output[chachaLen + nhLen..][..polyLen].to_vec()).unwrap().iter()
+                .map(|x| *x % 2u64.pow(60)).collect(),
+            A: toInts8(&output[chachaLen + nhLen + polyLen..][..asuLen].to_vec()).unwrap(),
         }
     }
 }
@@ -715,13 +718,64 @@ mod tests {
     }
 
     #[test]
-    fn test_hs1_siv_hi_init() {
-        HS1::new(HS1_SIV_HI);
+    fn test_hs1_siv_lo_init() { HS1::new(HS1_SIV_LO); }
+    #[test]
+    fn test_hs1_siv_init()    { HS1::new(HS1_SIV);    }
+    #[test]
+    fn test_hs1_siv_hi_init() { HS1::new(HS1_SIV_HI); }
+
+    #[test]
+    fn test_hs1_siv_lo_subkeygen() {
+        let hs1: HS1 = HS1::new(HS1_SIV_LO);
+        let key: Key = hs1.subkeygen(&KEY_32_BYTES[..]);
+
+        let expected_key: Key = Key {
+            S: [029, 228, 104, 037, 180, 170, 202, 148,
+                039, 029, 011, 119, 052, 228, 162, 079,
+                128, 010, 066, 099, 030, 015, 033, 081,
+                069, 168, 127, 167, 237, 243, 229, 077],
+            N: vec![2660748217, 2558697155, 1714681981, 3657416328,
+                    3435480299, 3645588291, 2921336019, 3151644245,
+                    1846274549, 733311385,  3992634613, 1373378016,
+                    2044750242, 3861933274, 3504758271, 2948714715,
+                    988945780,  2774551967, 1716400572, 2887958241],
+            P: vec![645997590300049322, 322522510819694843],
+            A: vec![14529885378449895274, 12653303077038689006, 4892742607418050275,
+                    5567500722073670002,  6892266127813746098, 3448115731693163942],
+        };
+        assert_eq!(expected_key, key);
     }
+
     #[test]
     fn test_hs1_siv_hi_subkeygen() {
         let hs1: HS1 = HS1::new(HS1_SIV_HI);
-        let key: Key = hs1.subkeygen(&TEST_KEY_32_BYTES[..]);
+        let key: Key = hs1.subkeygen(&KEY_32_BYTES[..]);
+
+        let expected_key: Key = Key {
+            S: [183, 203, 207, 198, 065, 127, 180, 010,
+                062, 177, 006, 231, 182, 034, 248, 155,
+                128, 204, 222, 205, 073, 134, 222, 225,
+                212, 089, 026, 111, 215, 000, 189, 158],
+            N: vec![0538054445, 3815201821, 1658273067, 2006661402,
+                    1502798711, 3216001020, 2791718294, 4158839867,
+                    1319188268, 2638818572, 3644886270, 4019180444,
+                    3870353244, 3868178272, 0788204393, 4190300094,
+                    0945830914, 0464429597, 1545514780, 3965556729,
+                    1313744640, 1477009656, 1226266952, 4227077356,
+                    0901828758, 1197816774, 1127449543, 2512935124,
+                    2771301304, 2077689234, 0535212884, 3260924812,
+                    2790804429, 4073305765, 0681150126, 2667672114],
+            P: vec![676683954131899665, 895992662275865463, 811712090461866245,
+                    441402635191776148, 975454427191395514, 566086767741485818],
+            A: vec![13166067761422627960, 05153395817732499259, 1274447141331486434,
+                    10110585516739992835, 16073407688598778655, 7542607024747653607,
+                    07638003855746033839, 07762141420122725837, 16832064194217617262,
+                    16812346987467787277, 02465464082020945580, 7918974157707067963,
+                    14820733191035548111, 13229803496537705501, 16383354179382607506,
+                    13241778947485406112, 04826904851142858747, 9817695108583611981],
+        };
+        assert_eq!(expected_key, key);
+    }
 
         print_key(key);
     }
