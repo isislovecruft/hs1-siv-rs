@@ -599,16 +599,19 @@ pub enum ConversionError {
 ///  * `input` is a `vec::Vec<u8>` (a.k.a. a vector of octets).
 ///
 /// # Examples
-/// ```
-/// let foo: mut [u8] = [0x41, 0x42, 0x43];
-/// pad(5, foo);
-/// assert_eq!(foo, [0x41, 0x42, 0x43, 0x00, 0x00])
+// TODO:  WTF, Rust?  Is there really no way to `use` a non-pub function within a doctest?
+/// ```text
+/// use crypto::hs1::pad;
+///
+/// let mut data: Vec<u8> = vec!([0x41, 0x42, 0x43]);
+/// let padded = pad(5, &data);
+///
+/// assert_eq!(padded, [0x41, 0x42, 0x43, 0x00, 0x00]);
 /// ```
 fn pad(multiple: usize, input: &Vec<u8>) -> Vec<u8> {
-    let needed:     usize   = input.len() % multiple;
     let mut padded: Vec<u8> = input.clone();
 
-    for _ in 0..needed {
+    while (padded.len() % multiple) > 0 {
         padded.push(0x00);
     }
     padded
@@ -617,9 +620,7 @@ fn pad(multiple: usize, input: &Vec<u8>) -> Vec<u8> {
 /// Utility for using pad() on a std::str::String.
 fn padStr(multiple: usize, input: &String) -> String {
     let mut i: Vec<u8> = Vec::with_capacity(input.len());
-
     i.extend(input.as_bytes());
-
     String::from_utf8(pad(multiple, &i)).unwrap()
 }
 
