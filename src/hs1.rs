@@ -24,10 +24,16 @@ use std::result::Result;
 use std::slice::Chunks;
 use std::vec::Vec;
 
-use chacha20::ChaCha20;
+use num::bigint::{BigInt, ToBigInt};
+use num::traits::{FromPrimitive, ToPrimitive};
+
+pub use chacha20::ChaCha20;
 use cryptoutil::xor_keystream;
 use symmetriccipher::SynchronousStreamCipher;
 
+macro_rules! u64toBI {
+    ($x:expr) => (BigInt::from_u64($x).expect(&format!("Couldn't convert {:?} into BigInt", $x)[..]))
+}
 
 /// May be raised upon HS1 decryption when the authenticator cannot be verified.
 #[derive(Debug, Clone, Copy)]
@@ -377,11 +383,15 @@ impl Hash for HS1 {
     fn hash(&self, kN: &Vec<u32>, kP: &u64, kA: &Vec<u64>, M: &Vec<u8>) -> Vec<u8> {
         let n:     u32;
         let Mi:    Chunks<u8>;
-        let mut a: Vec<u32> = Vec::new();
         let mut Y: Vec<u8>;
+        let mut a: Vec<BigInt> = Vec::new();
+        let mut h: BigInt;
+        let mut m: BigInt; // m is set to one of two moduli, each reused rather than recomputed.
+
+        println!("kA = {:?}", kA);
 
         // 1. n = max(⌈|M|/b⌉, 1)
-        n = if M.len() < 1 { 1 } else { M.len() as u32 / self.parameters.b as u32 };
+        n = std::cmp::max(M.len() as u32 / self.parameters.b as u32, 1);
 
         // 2. M_1 || M_2 || … || M_n = M and |M_i| = b for each 1 ≤ i ≤ n.
         Mi = M.chunks(self.parameters.b as usize);
@@ -390,23 +400,21 @@ impl Hash for HS1 {
         for (_, chunk) in Mi.enumerate() {
             let mi: Vec<u32> = toInts4(&pad(16, &chunk.to_vec())).unwrap();
             // 4. a_i = NH(kN, m_i) mod 2^60 + (|M_i| mod 16) for each 1 ≤ i ≤ n.
-            a.push(&nh(kN, &mi) % 2u32.pow(60) + (self.parameters.b as u32 % 16));
+            a.push(NH(kN, &mi) + BigInt::from_u8(self.parameters.b % 16u8).unwrap());
         }
-
         // 5. h = kP^n + (a_1 × kP^(n-1)) + (a_2 × kP^(n-2)) + ... + (a_n × kP^0) mod (2^61 - 1)
-        let mut h:   u64 = kP.pow(n);
-        for (ai, j) in a.iter().zip(n .. 0) {
-            h += *ai as u64 * kP.pow(j);
+        h = u64toBI!((*kP as u64).pow(n) % 2u64.pow(61)-1);
+        m = u64toBI!(2u64.pow(61)-1);
+        for (ai, j) in a.iter().zip(n as i32 .. 0) {
+            h = h + (ai % m.clone()) * (u64toBI!(kP.pow(j as u32)) % m.clone()) % m.clone();
         }
-        h = h % (2u64.pow(61) - 1); // XXX Maybe we should define a Wrapping<T> for h?
-
         // 6. if (t ≤ 4) Y = toStr(8, h)
         if self.parameters.t <= 4 {
             Y = toStr(8, &(h.to_u64().unwrap() as usize)).unwrap(); // XXX error handling
             Y.truncate(8);
         } else {
         // 7. else Y = toStr(4, (kA[0] + kA[1] × (h mod 2^32) + kA[2] × (h div 2 ^32)) div 2^32)
-            let modulus: u64 = 2u64.pow(32);
+            m = u64toBI!(2u64.pow(32));
             Y = toStr(4, &(((u64toBI!(kA[0].clone()) +
                              u64toBI!(kA[1].clone()) * (h.clone() % m.clone()) +
                              u64toBI!(kA[2].clone()) * (h.clone() / m.clone())) / m.clone())
@@ -519,8 +527,51 @@ impl Decrypt for HS1 {
              String::from_utf8(toStr(8, &M.len()).unwrap()).unwrap()].concat(); //XXX
         t = String::from_utf8(self.prf(&k, &m, N, self.parameters.l as i64)).unwrap();
 
-        if *T == *t { Ok(M) } else { Err(AuthenticationError) }
+        if *T == *t { Ok(M) } else { Err(Error::AuthenticationError) }
     }
+}
+
+// XXX_QUESTION: We moved the `mod 2^60` from hash() to NH() for simplicity… should this be changed
+// in the spec?
+//
+// XXX_QUESTION: This is the only place in HS1-SIV which requires a bignum… everything else can get
+// away with utilising either u32 or u64.  Should/can this be restructured to avoid needing a bignum?
+//
+/// Given vectors of integers, `v1` and `v2`, returns the result of the following algorithm:
+///
+/// ```text
+///                   n/4 ⎛                                           ⎞
+///     NH(v1, v2) =   Σ  ⎜(v1[4i-3]+v2[4i-3]) × (v1[4i-1]+v2[4i-1]) +⎟
+///                   i=1 ⎝(v1[4i-2]+v2[4i-2]) × (v1[4i]+v2[4i])      ⎠
+/// ```
+/// where `n = min(|v1|, |v2|)` and is alway a multiple of 4.
+///
+/// # Examples
+/// ```ignore
+/// use num::traits::ToPrimitive;
+/// use crypto::hs1::NH;
+///
+/// let v1: Vec<u32> = vec![3189664965, 2714692993, 2994129442, 1858380706,
+///                         1587789763, 415824430,  835318381,  2279956929,
+///                         3870281273, 116792861,  285581825,  4002263835,
+///                         2553110182, 676095448,  2497697706, 3646967354];
+/// let v2: Vec<u32> = vec![543516756,  2003792483, 1768711712, 1629516645,
+///                        1768759412,  1734962788, 3044456,    0];
+///
+/// let n: u64 = NH(&v1, &v2).to_u64().unwrap();
+/// assert_eq!(n, 162501409595406698u64);
+/// ```
+pub fn NH(v1: &Vec<u32>, v2: &Vec<u32>) -> BigInt {
+    let mut sum: BigInt = BigInt::from_usize(0).unwrap();
+    let m:       BigInt = BigInt::from_u64(2u64.pow(60)).unwrap();
+    let bn1:     Vec<BigInt> = v1.iter().map(|x| x.to_bigint().unwrap()).collect();
+    let bn2:     Vec<BigInt> = v2.iter().map(|x| x.to_bigint().unwrap()).collect();
+
+    for i in 1 .. std::cmp::min(bn1.len(), bn2.len())/4 {
+        sum = sum + (((&bn1[4 * i-3] + &bn2[4 * i-3]) * (&bn1[4 * i-1] + &bn2[4 * i-1]) +
+                      (&bn1[4 * i-2] + &bn2[4 * i-2]) * (&bn1[4 * i  ] + &bn2[4 * i  ])) % &m);
+    }
+    sum
 }
 
 //-------------------------------------------------------------------------------------------------
