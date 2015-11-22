@@ -29,7 +29,8 @@ use num::traits::{FromPrimitive, ToPrimitive};
 
 pub use chacha20::ChaCha20;
 use cryptoutil::xor_keystream;
-use symmetriccipher::SynchronousStreamCipher;
+use symmetriccipher::SynchronousStreamCipher; // Used in order to call ChaCha20::process().
+
 
 macro_rules! u64toBI {
     ($x:expr) => (BigInt::from_u64($x).expect(&format!("Couldn't convert {:?} into BigInt", $x)[..]))
