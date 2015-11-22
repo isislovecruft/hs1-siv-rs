@@ -244,8 +244,6 @@ impl Subkeygen for HS1 {
     }
 }
 
-// XXX_QUESTION: The equation of step #2 in the paper appears to be missing a parenthesis.
-
 /// Hash `M` a total of `t` times with different keys and combine the result with the stream
 /// cipher’s key.
 ///
@@ -277,38 +275,67 @@ impl Subkeygen for HS1 {
 ///
 /// # Example
 /// ```
+/// #![allow(non_snake_case)]
+/// use crypto::hs1::{HS1, Subkeygen, PRF, HS1_SIV_HI, Key};
+///
 /// let hs1: HS1     = HS1::new(HS1_SIV_HI);
 /// let k:   Key     = hs1.subkeygen(&([0x01; 32])[..]);
-/// let M:   String  = "foo bar baz qux";
-/// let N:   Vec<u8> = vec!([0u8; 12]);
-/// let y:   i64     = 0;
+/// let M:   String  = String::from("foo bar baz qux");
+/// let N:   Vec<u8> = vec![0u8; 12];
+/// let y:   i64     = 32;
 ///
-/// let result: Vec<u8> = hs1.prf(&k, &M, &N, &y);
-/// println!("HS1-PRF result is {}", result);
+/// let result: Vec<u8> = hs1.prf(&k, &M, &N, y);
+/// assert_eq!(result, vec![151, 16,  188, 72,  72,  91,  85,  156,
+///                         68,  172, 92,  213, 5,   22,  191, 0,
+///                         157, 233, 241, 213, 205, 63,  178, 89,
+///                         206, 5,   156, 166, 169, 109, 239, 225])
 /// ```
 impl PRF for HS1 {
     fn prf(&self, k: &Key, M: &String, N: &Vec<u8>, y: i64) -> Vec<u8> {
+        assert_eq!(k.S.len(), 32);
         assert_eq!(N.len(), 12);
+        assert!(0i64 < y);
+        assert!(y < 2i64.pow(38));
 
         let mut A:   Vec<u8> = Vec::with_capacity(self.parameters.t as usize);
         let mut key: Vec<u8> = repeat(0).take(y as usize).collect();
-        let mut out: Vec<u8> = repeat(0).take(y as usize).collect();
+        let mut Y:   Vec<u8> = repeat(0).take(y as usize).collect();
+
+        println!("y = {}", y);
+
+        // XXX_QUESTION: There probably a typo here at kA[3i, 3], since, when i == i, then the
+        // subarray will be empty.  Perhaps we're supposed to do kA[3i, 3i+3]?
+
+        // XXX_QUESTION: When i >= 5, we don't take anything from kN, because len(kN) == 36 and
+        // (b/4) == 16.  Maybe it's supposed to be kN[4i, (b/4)+4(t-1)]?
 
         // 1. `A_i = HS1-Hash[b,t](kN[4i, b/4], kP[i], kA[3i, 3], M) for each 0 ≤ i < t`
         for i in 0 .. self.parameters.t {
-            let a: Vec<u32> = k.N[i as usize * 4 .. (self.parameters.b / 4) as usize].to_vec();
-            let b: u64      = k.P[i as usize];
-            let c: Vec<u64> = k.A[i as usize * 3 .. 3].to_vec();
+            let n: Vec<u32> = k.N[i as usize * 4 .. (self.parameters.b as usize / 4) +
+                                               (4 * (self.parameters.t as usize - 1))].to_vec();
+            let p: u64      = k.P[i as usize];
+            let a: Vec<u64> = k.A[i as usize * 3 .. (i as usize * 3 + 3)].to_vec();
 
-            let hashed = self.hash(&a, &b, &c, &M.clone().into_bytes());
+            // Concatenate A_i (either 4 or 8 bytes) into the hashed input for combination with the
+            // keystream:
+            let hashed = self.hash(&n, &p, &a, &M.clone().into_bytes());
             for byte in hashed.iter() {
-                A.push(*byte); // Concatenate A_i (either 4 or 8 bytes) into the input
+                A.push(*byte);
             }
         }
+        // XXX_QUESTION: The equation of step #2 in the paper appears to be missing a parenthesis.
+
+        // XXX_QUESTION: If we pad the hash output to 32 bytes, and then process said padded hash
+        // output with ChaCha into a vector of y bytes, this will *always* fail when y != 32,
+        // because ChaCha expects the input and output vectors to have the same length.  Should y
+        // always be 32?  Or should we be doing ChaCha with a correctly sized vector and *then*
+        // truncating/padding to y number of bytes?  Or pad twice (i.e. pad once to 32 bytes in
+        // order to xor into the keystream, and then pad/trucate again to match the output vector)?
+
         // 2. `Y   = ChaCha[r](pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)`
         xor_keystream(&mut key, &pad(32, &A), &k.S[..]);
-        ChaCha20::new(&key, &[0u8], Some(self.parameters.r as i8)).process(&N[..], &mut out[..]);
-        out.to_vec()
+        ChaCha20::new(&k.S, &N[..], Some(self.parameters.r as i8)).process(&key[..], &mut Y[..]);
+        Y.to_vec()
     }
 }
 
