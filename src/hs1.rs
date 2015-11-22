@@ -36,9 +36,13 @@ macro_rules! u64toBI {
     ($x:expr) => (BigInt::from_u64($x).expect(&format!("Couldn't convert {:?} into BigInt", $x)[..]))
 }
 
-/// May be raised upon HS1 decryption when the authenticator cannot be verified.
 #[derive(Debug, Clone, Copy)]
-pub struct AuthenticationError;
+pub enum Error {
+    /// Raised upon HS1 decryption if the authenticator cannot be verified.
+    AuthenticationError,
+    /// Raised if some portion of a `Key` was not formatted correctly.
+    KeyFormatError,
+}
 
 /// HS1-SIV key material.
 ///
@@ -161,7 +165,7 @@ pub trait Encrypt {
 
 pub trait Decrypt {
     fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
-               -> Result<String, AuthenticationError>;
+               -> Result<String, Error>;
 }
 
 impl HS1 {
@@ -506,7 +510,7 @@ impl Encrypt for HS1 {
 /// 6. else return AuthenticationError
 impl Decrypt for HS1 {
     fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
-               -> Result<String, AuthenticationError> {
+               -> Result<String, Error> {
         assert!(K.len() <= 32);
         assert!(T.len() == self.parameters.l as usize);
         assert!(C.len() < 2usize.pow(64));
