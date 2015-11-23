@@ -158,18 +158,24 @@ pub trait Subkeygen {
     fn subkeygen(&self, K: &[u8]) -> Key;
 }
 
+/// Hash `M` a total of `t` times with different keys and combine the result with the stream
+/// cipher’s key.
 pub trait PRF {
     fn prf(&self, k: &Key, M: &String, N: &Vec<u8>, y: i64) -> Vec<u8>;
 }
 
+/// The hash family HS1-Hash is `(1/2^(28) + l/b2^(60))-AU` for all `M` up to `l` bytes, when
+/// `k_N` and `k_P` are chosen randomly and `t ≤ 4`.
 pub trait Hash {
     fn hash(&self, kN: &Vec<u32>, kP: &u64, kA: &Vec<u64>, M: &Vec<u8>) -> Vec<u8>;
 }
 
+/// Encrypt the message `M` using the HS1-SIV authenticated encryption cipher.
 pub trait Encrypt {
     fn encrypt(&self, K: &[u8], M: &String, A: &String, N: &Vec<u8>) -> (String, String);
 }
 
+/// Decrypt (and authenticate) the ciphertext `C` using the HS1-SIV authenticated encryption cipher.
 pub trait Decrypt {
     fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
                -> Result<String, Error>;
