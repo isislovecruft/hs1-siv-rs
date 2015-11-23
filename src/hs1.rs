@@ -879,4 +879,19 @@ mod tests {
                     079, 142, 009, 219, 173, 035, 242, 139,
                     008, 242, 087, 188, 218, 213, 001, 030])
     }
+
+    #[test]
+    fn test_hs1_siv_hi_prf() {
+        let hs1: HS1     = HS1::new(HS1_SIV_HI);
+        let key: Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
+
+        // That's what the acronym is short for, right?
+        let punk_rock_forever: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
+
+        assert_eq!(&punk_rock_forever[..],
+                   [130, 117, 220, 062, 161, 067, 098, 123,
+                    054, 165, 149, 123, 006, 113, 049, 186,
+                    174, 095, 063, 143, 022, 047, 247, 121,
+                    027, 017, 145, 002, 210, 154, 241, 235])
+    }
 }
