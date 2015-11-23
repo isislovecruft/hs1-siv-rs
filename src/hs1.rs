@@ -17,7 +17,6 @@
 #![allow(non_snake_case)]
 
 use std;
-use std::cmp::min;
 use std::collections::BitVec;
 use std::iter::{Extend, repeat};
 use std::result::Result;
