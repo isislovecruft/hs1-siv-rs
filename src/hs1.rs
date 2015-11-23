@@ -753,18 +753,16 @@ fn take32 <'a> (x: &'a [u8]) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use hs1::*;
+    use std::iter::repeat;
 
-    static TEST_KEY_32_BYTES: [u8; 32] = [
+    static KEY_32_BYTES: [u8; 32] = [
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
         0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
         0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24,
         0x25, 0x26, 0x27, 0x28, 0x29, 0x30, 0x31, 0x32,];
 
-    fn print_key(key: Key) {
-        println!("kS: {:?}", &key.S[..]);
-        println!("kN: {:?}", &key.N[..]);
-        println!("kP: {:?}", &key.P[..]);
-        println!("kA: {:?}", &key.A[..]);
+    fn nonce() -> Vec<u8> { repeat(0).take(12).collect() }
+    fn msg() -> String { String::from("The crow flies at midnight.") }
 
     #[test]
     fn test_hs1_toStr_toInts4_3() {
