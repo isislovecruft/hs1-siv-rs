@@ -30,10 +30,10 @@ use std::result::Result;
 use std::slice::Chunks;
 use std::vec::Vec;
 
-use num::bigint::{BigInt, ToBigInt};
-use num::traits::{FromPrimitive, ToPrimitive};
+pub use num::bigint::{BigInt, ToBigInt};
+pub use num::traits::{FromPrimitive, ToPrimitive};
 
-pub use chacha20::ChaCha20;
+use chacha20::ChaCha20;
 use cryptoutil::xor_keystream;
 use symmetriccipher::SynchronousStreamCipher; // Used in order to call ChaCha20::process().
 
