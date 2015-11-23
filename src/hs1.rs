@@ -733,17 +733,6 @@ pub fn toInts8(S: &Vec<u8>) -> Result<Vec<u64>, ConversionError> {
     Ok(ints)
 }
 
-fn take4  <'a> (x: &'a [u8]) -> [u8; 4] {
-    assert!(x.len() >= 4);
-    [x[0], x[1], x[2], x[3]]
-}
-
-fn take8  <'a> (x: &'a [u8]) -> [u8; 8] {
-    assert!(x.len() >= 8);
-    [x[0], x[1], x[2], x[3],
-     x[4], x[5], x[6], x[7]]
-}
-
 fn take32 <'a> (x: &'a [u8]) -> [u8; 32] {
     assert!(x.len() >= 12);
     [x[0],  x[1],  x[2],  x[3],
