@@ -161,7 +161,7 @@ pub trait Subkeygen {
 /// Hash `M` a total of `t` times with different keys and combine the result with the stream
 /// cipher’s key.
 pub trait PRF {
-    fn prf(&self, k: &Key, M: &String, N: &Vec<u8>, y: i64) -> Vec<u8>;
+    fn prf(&self, k: &Key, M: &Vec<u8>, N: &Vec<u8>, y: i64) -> Vec<u8>;
 }
 
 /// The hash family HS1-Hash is `(1/2^(28) + l/b2^(60))-AU` for all `M` up to `l` bytes, when
@@ -339,14 +339,14 @@ impl Subkeygen for HS1 {
 /// let N:   Vec<u8> = vec![0u8; 12];
 /// let y:   i64     = 32;
 ///
-/// assert_eq!(hs1.prf(&k, &M, &N, y),
+/// assert_eq!(hs1.prf(&k, &M.to_bytes(), &N, y),
 ///            vec![094, 241, 144, 091, 056, 120, 029, 023,
 ///                 253, 066, 103, 066, 189, 033, 247, 150,
 ///                 038, 086, 209, 237, 173, 164, 140, 048,
 ///                 092, 230, 175, 079, 064, 119, 249, 143])
 /// ```
 impl PRF for HS1 {
-    fn prf(&self, k: &Key, M: &String, N: &Vec<u8>, y: i64) -> Vec<u8> {
+    fn prf(&self, k: &Key, M: &Vec<u8>, N: &Vec<u8>, y: i64) -> Vec<u8> {
         assert_eq!(k.S.len(), 32);
         assert_eq!(N.len(), 12);
         assert!(0i64 < y);
@@ -518,10 +518,13 @@ impl Encrypt for HS1 {
              String::from_utf8(toStr(8, &A.len())).unwrap(), // XXX should these be vectors instead?
              String::from_utf8(toStr(8, &M.len())).unwrap()].concat();
 
-        t = self.prf(&k, &m, &N, self.parameters.l as i64);
-        T = String::from_utf8(t).unwrap();
-        xor_keystream(&mut out[..], M.as_bytes(),
-                      &self.prf(&k, &T, &N, (64 + M.len()) as i64)[..]);
+        // XXX_QUESTION: Here we are supposed to use `l` as the final parameter to prf(). However,
+        // because y must equal 32 — as noted in a XXX_QUESTION above in prf() — we can only do this
+        // when using the HS1_SIV_HI parameter set.
+
+        //T = self.prf(&k, &m, &N, self.parameters.l as i64);
+        T = self.prf(&k, &m, &N, 32i64);
+        xor_keystream(&mut out[..], M, &self.prf(&k, &T, &N, (64 + M.len()) as i64)[..]);
         C = String::from_utf8(out.to_vec()).unwrap();
 
         assert_eq!(T.len(), self.parameters.l as usize);
@@ -578,7 +581,7 @@ impl Decrypt for HS1 {
              padStr(16, &M),
              String::from_utf8(toStr(8, &A.len())).unwrap(),
              String::from_utf8(toStr(8, &M.len())).unwrap()].concat();
-        t = String::from_utf8(self.prf(&k, &m, N, self.parameters.l as i64)).unwrap();
+        t = self.prf(&k, &m, N, self.parameters.l as i64);
 
         if *T == *t { Ok(M) } else { Err(Error::AuthenticationError) }
     }
@@ -803,7 +806,8 @@ mod tests {
         0x25, 0x26, 0x27, 0x28, 0x29, 0x30, 0x31, 0x32,];
 
     fn nonce() -> Vec<u8> { repeat(0).take(12).collect() }
-    fn msg() -> String { String::from("The crow flies at midnight.") }
+    fn msg() -> Vec<u8> { String::from("The crow flies at midnight.").into_bytes() }
+    fn associated_data() -> Vec<u8> { String::from("Nomnomnom data").into_bytes() }
 
     #[test]
     fn test_hs1_toStr_toInts4_3() {
@@ -939,7 +943,7 @@ mod tests {
     fn test_hs1_siv_lo_hash() {
         let hs1:  HS1     = HS1::new(HS1_SIV_LO);
         let key:  Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
-        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg().into_bytes());
+        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg());
         assert_eq!(&hash[..], [0, 0, 0, 0, 0, 0, 0, 31])
     }
 
@@ -947,7 +951,7 @@ mod tests {
     fn test_hs1_siv_hash() {
         let hs1:  HS1     = HS1::new(HS1_SIV);
         let key:  Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
-        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg().into_bytes());
+        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg());
         assert_eq!(&hash[..], [0, 0, 0, 0, 0, 0, 0, 31])
     }
 
@@ -955,7 +959,7 @@ mod tests {
     fn test_hs1_siv_hi_hash() {
         let hs1:  HS1     = HS1::new(HS1_SIV_HI);
         let key:  Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
-        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg().into_bytes());
+        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg());
         assert_eq!(&hash[..], [149, 252, 064, 013])
     }
 }
