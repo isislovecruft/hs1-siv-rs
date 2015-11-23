@@ -499,10 +499,10 @@ impl Hash for HS1 {
 ///
 /// # Algorithm:
 ///
-/// 1. k = HS1-subkeygen[b,t,r,l](K)
+/// 1. k = HS1-subkeygen {b,t,r,l} (K)
 /// 2. M' = pad(16, A) || pad(16, M) || toStr(8, |A|) || toStr(8, |M|)
-/// 3. T = HS1[b,t,r](k, M', N, l)
-/// 4. C = M ⊕ HS1[b,t,r](k, T, N, 64 + |M|)[64, |M|]
+/// 3. T = HS1 {b,t,r} (k, M', N, l)
+/// 4. C = M ⊕ HS1 {b,t,r} (k, T, N, 64 + |M|)[64, |M|]
 impl Encrypt for HS1 {
     fn encrypt(&self, K: &[u8], M: &String, A: &String, N: &Vec<u8>) -> (String, String) {
         assert!(K.len() <= 32);
@@ -554,10 +554,10 @@ impl Encrypt for HS1 {
 ///
 /// # Algorithm:
 ///
-/// 1. k = HS1-subkeygen[b,t,r,l](K)
-/// 2. M = C ⊕ HS1[b,t,r](k, T, N, 64 + |C|)[64, |C|]
+/// 1. k = HS1-subkeygen {b,t,r,l} (K)
+/// 2. M = C ⊕ HS1 {b,t,r} (k, T, N, 64 + |C|)[64, |C|]
 /// 3. M' = pad(16, A) || pad(16, M) || toStr(8, |A|) || toStr(8, |M|)
-/// 4. T' = HS1[b,t,r](k, M', N, l)
+/// 4. T' = HS1 {b,t,r} (k, M', N, l)
 /// 5. if (T = T') then return M
 /// 6. else return AuthenticationError
 impl Decrypt for HS1 {
