@@ -601,12 +601,11 @@ impl Decrypt for HS1 {
 ///     NH(v1, v2) =   Σ  ⎜(v1[4i-3]+v2[4i-3]) × (v1[4i-1]+v2[4i-1]) +⎟
 ///                   i=1 ⎝(v1[4i-2]+v2[4i-2]) × (v1[4i]+v2[4i])      ⎠
 /// ```
-/// where `n = min(|v1|, |v2|)` and is alway a multiple of 4.
+/// where `n = min(v1.len(), v2.len())` and is alway a multiple of 4.
 ///
 /// # Examples
-/// ```ignore
-/// use num::traits::ToPrimitive;
-/// use crypto::hs1::NH;
+/// ```
+/// use crypto::hs1::{NH, BigInt, ToPrimitive};
 ///
 /// let v1: Vec<u32> = vec![3189664965, 2714692993, 2994129442, 1858380706,
 ///                         1587789763, 415824430,  835318381,  2279956929,
@@ -615,8 +614,7 @@ impl Decrypt for HS1 {
 /// let v2: Vec<u32> = vec![543516756,  2003792483, 1768711712, 1629516645,
 ///                        1768759412,  1734962788, 3044456,    0];
 ///
-/// let n: u64 = NH(&v1, &v2).to_u64().unwrap();
-/// assert_eq!(n, 162501409595406698u64);
+/// assert_eq!(NH(&v1, &v2).to_u64().unwrap(), 162501409595406698u64);
 /// ```
 pub fn NH(v1: &Vec<u32>, v2: &Vec<u32>) -> BigInt {
     let mut sum: BigInt = BigInt::from_usize(0).unwrap();
