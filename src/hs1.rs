@@ -356,8 +356,6 @@ impl PRF for HS1 {
         let mut key: Vec<u8> = repeat(0).take(y as usize).collect();
         let mut Y:   Vec<u8> = repeat(0).take(y as usize).collect();
 
-        println!("y = {}", y);
-
         // XXX_QUESTION: There probably a typo here at kA[3i, 3], since, when i == i, then the
         // subarray will be empty.  Perhaps we're supposed to do kA[3i, 3i+3]?
 
@@ -444,8 +442,6 @@ impl Hash for HS1 {
         let mut a: Vec<BigInt> = Vec::new();
         let mut h: BigInt;
         let mut m: BigInt; // m is set to one of two moduli, each reused rather than recomputed.
-
-        println!("kA = {:?}", kA);
 
         // 1. n = max(⌈|M|/b⌉, 1)
         n = std::cmp::max(M.len() as u32 / self.parameters.b as u32, 1);
