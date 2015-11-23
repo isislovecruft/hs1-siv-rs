@@ -4,13 +4,20 @@
 //
 // Authors: Isis Agora Lovecruft <isis@en.ciph.re> 0xA3ADB67A2CDB8B35
 
-/*! A reference implementation of the HS1-SIV authenticated-encryption cipher.
- *
- * WARNING: **REFERENCE IMPLEMENTATION** MEANS **FOR REFERENCE ONLY**.  The author is quite
- * certain that this implementation is quite vulnerable to several types of side channels, e.g. due
- * to modular exponentiation via Rust's pow() method (which uses a naïve add-and-multiply
- * algorithm), as well as branching/conditionals on secret data.  **USE AT YOUR OWN RISK**.
- */
+//! A reference implementation of [the HS1-SIV authenticated-encryption cipher, version 2]().
+//!
+//! WARNING: ***REFERENCE IMPLEMENTATION*** MEANS ***FOR REFERENCE ONLY***.
+//!
+//! The author is quite certain that this implementation is not without side channels, e.g. due to
+//! modular exponentiation via Rust's pow() method (which uses a naïve add-and-multiply algorithm).
+//!
+//! ***USE AT YOUR OWN RISK***.
+//!
+//! ## TODO:
+//!
+//!    * Get answers to all questions in the code (marked with `XXX_QUESTION`).
+//!    * Cleanup all the places marked with `XXX`.
+//!    * Vectorise with `std::simd`?
 
 // We use variable and function names from the HS1-SIV paper throughout this implementation, most
 // of which do not conform to Rust's standard of using snake case.
