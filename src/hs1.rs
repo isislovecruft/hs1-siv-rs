@@ -374,6 +374,13 @@ impl PRF for HS1 {
 ///
 /// - `Y`, an 8-byte (if t ≤ 4) or 4-byte (if t > 4) string.
 ///
+/// # Adversarial Advantages
+///
+/// An adversary who can observe via some side channel, e.g. via differential power analysis or
+/// timings, the execution of this function, can with some high probability determine the length of
+/// the message, `M`.  This is due to a branching in step #3 of the underlying algorithm on
+/// fixed-size chunks of the message.
+///
 /// # Algorithm:
 ///
 /// 1. n = max(⌈|M|/b⌉, 1)
