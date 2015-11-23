@@ -320,20 +320,19 @@ impl Subkeygen for HS1 {
 ///
 /// # Algorithm
 ///
-/// 1. A_i = HS1-Hash[b,t](kN[4i, b/4], kP[i], kA[3i, 3], M) for each 0 ≤ i < t
-/// 2. Y   = ChaCha[r](pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)
+/// 1. A_i = HS1-Hash {b,t} (kN[4i, b/4], kP[i], kA[3i, 3], M) for each 0 ≤ i < t
+/// 2. Y   = ChaCha {r} (pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)
 ///
 /// # Side Channels
 ///
 /// An adversary with the ability to conduct timing-based side channel attacks on a machine running
-/// this code will some advantage to determine the `Parameter` set used (i.e. `HS1_SIV_LO`,
-/// `HS1_SIV`, `HS1_SIV_HI`).
+/// this code will some advantage to determine the Parameter set used (i.e. HS1_SIV_LO, HS1_SIV,
+/// or HS1_SIV_HI).
 ///
 /// # Example
 /// ```
-/// #![allow(non_snake_case)]
-/// use crypto::hs1::{HS1, Subkeygen, PRF, HS1_SIV_HI, Key};
-///
+/// # #![allow(non_snake_case)]
+/// # use crypto::hs1::{HS1, Subkeygen, PRF, HS1_SIV_HI, Key};
 /// let hs1: HS1     = HS1::new(HS1_SIV_HI);
 /// let k:   Key     = hs1.subkeygen(&([0x01; 32])[..]);
 /// let M:   String  = String::from("foo bar baz qux");
@@ -407,7 +406,8 @@ impl PRF for HS1 {
 /// `k_N` and `k_P` are chosen randomly and `t ≤ 4`.
 ///
 /// The hash family is `(1/2^(28) + 1/2^(32) + l/b2^(60))-SU` when additionally `k_A` is
-/// randomly chosen and `t > 4`.
+/// randomly chosen and `t > 4`.  The extra 1/2^32 coming from Line 7, a strongly universal hash
+/// developed by Lemire.
 ///
 /// # Inputs
 ///
