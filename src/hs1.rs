@@ -855,6 +855,27 @@ mod tests {
         assert_eq!(expected_key, key);
     }
 
-        print_key(key);
+    #[test]
+    fn test_hs1_siv_lo_prf() {
+        let hs1: HS1     = HS1::new(HS1_SIV_LO);
+        let key: Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
+        let prf: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
+        assert_eq!(&prf[..],
+                   [049, 126, 200, 176, 047, 149, 122, 127,
+                    093, 175, 254, 120, 236, 058, 175, 181,
+                    229, 218, 075, 106, 061, 222, 202, 072,
+                    049, 044, 177, 204, 157, 043, 149, 155])
+    }
+
+    #[test]
+    fn test_hs1_siv_prf() {
+        let hs1: HS1     = HS1::new(HS1_SIV);
+        let key: Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
+        let prf: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
+        assert_eq!(&prf[..],
+                   [087, 219, 214, 244, 150, 015, 254, 233,
+                    191, 037, 001, 157, 199, 149, 027, 014,
+                    079, 142, 009, 219, 173, 035, 242, 139,
+                    008, 242, 087, 188, 218, 213, 001, 030])
     }
 }
