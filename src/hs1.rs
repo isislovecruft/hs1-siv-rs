@@ -894,4 +894,20 @@ mod tests {
                     174, 095, 063, 143, 022, 047, 247, 121,
                     027, 017, 145, 002, 210, 154, 241, 235])
     }
+
+    #[test]
+    fn test_hs1_siv_lo_hash() {
+        let hs1:  HS1     = HS1::new(HS1_SIV_LO);
+        let key:  Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
+        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg().into_bytes());
+        assert_eq!(&hash[..], [0, 0, 0, 0, 0, 0, 0, 31])
+    }
+
+    #[test]
+    fn test_hs1_siv_hash() {
+        let hs1:  HS1     = HS1::new(HS1_SIV);
+        let key:  Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
+        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg().into_bytes());
+        assert_eq!(&hash[..], [0, 0, 0, 0, 0, 0, 0, 31])
+    }
 }
