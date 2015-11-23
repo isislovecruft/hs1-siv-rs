@@ -910,4 +910,12 @@ mod tests {
         let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg().into_bytes());
         assert_eq!(&hash[..], [0, 0, 0, 0, 0, 0, 0, 31])
     }
+
+    #[test]
+    fn test_hs1_siv_hi_hash() {
+        let hs1:  HS1     = HS1::new(HS1_SIV_HI);
+        let key:  Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
+        let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg().into_bytes());
+        assert_eq!(&hash[..], [149, 252, 064, 013])
+    }
 }
