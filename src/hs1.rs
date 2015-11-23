@@ -237,7 +237,7 @@ impl Subkeygen for HS1 {
                          self.parameters.t as u64 * 2u64.pow(40) +
                          self.parameters.r as u64 * 2u64.pow(32) +
                          self.parameters.l as u64 * 2u64.pow(16) +
-                         K.len() as u64) as usize)).unwrap(); // XXX error handling
+                         K.len() as u64) as usize));
         N.truncate(12);
 
         chacha = ChaCha20::new(&kPrime, &N[..], Some(self.parameters.r as i8));
@@ -421,7 +421,7 @@ impl Hash for HS1 {
         }
         // 6. if (t ≤ 4) Y = toStr(8, h)
         if self.parameters.t <= 4 {
-            Y = toStr(8, &(h.to_u64().unwrap() as usize)).unwrap(); // XXX error handling
+            Y = toStr(8, &(h.to_u64().unwrap() as usize));
             Y.truncate(8);
         } else {
         // 7. else Y = toStr(4, (kA[0] + kA[1] × (h mod 2^32) + kA[2] × (h div 2 ^32)) div 2^32)
@@ -429,7 +429,7 @@ impl Hash for HS1 {
             Y = toStr(4, &(((u64toBI!(kA[0].clone()) +
                              u64toBI!(kA[1].clone()) * (h.clone() % m.clone()) +
                              u64toBI!(kA[2].clone()) * (h.clone() / m.clone())) / m.clone())
-                           .to_u64().unwrap() as usize)).unwrap(); // XXX error handling
+                           .to_u64().unwrap() as usize));
             Y.truncate(4);
         }
         Y
@@ -473,8 +473,8 @@ impl Encrypt for HS1 {
 
         m = [padStr(16, &A),
              padStr(16, &M),
-             String::from_utf8(toStr(8, &A.len()).unwrap()).unwrap(), // XXX should these be vectors instead?
-             String::from_utf8(toStr(8, &M.len()).unwrap()).unwrap()].concat(); // XXX error handling ←↑
+             String::from_utf8(toStr(8, &A.len())).unwrap(), // XXX should these be vectors instead?
+             String::from_utf8(toStr(8, &M.len())).unwrap()].concat();
 
         t = self.prf(&k, &m, &N, self.parameters.l as i64);
         T = String::from_utf8(t).unwrap();
@@ -534,8 +534,8 @@ impl Decrypt for HS1 {
         M = String::from_utf8(out.to_vec()).unwrap();
         m = [padStr(16, &A),
              padStr(16, &M),
-             String::from_utf8(toStr(8, &A.len()).unwrap()).unwrap(), //XXX error handling ←↓
-             String::from_utf8(toStr(8, &M.len()).unwrap()).unwrap()].concat(); //XXX
+             String::from_utf8(toStr(8, &A.len())).unwrap(),
+             String::from_utf8(toStr(8, &M.len())).unwrap()].concat();
         t = String::from_utf8(self.prf(&k, &m, N, self.parameters.l as i64)).unwrap();
 
         if *T == *t { Ok(M) } else { Err(Error::AuthenticationError) }
@@ -630,33 +630,34 @@ fn padStr(multiple: usize, input: &String) -> String {
     String::from_utf8(pad(multiple, &i)).unwrap()
 }
 
-/// `toStr(n, x)` is the n-byte unsigned little-endian binary representation of integer x.
+/// `toStr(n, x)` is the `n`-byte unsigned little-endian binary representation of integer `x`.
 ///
 /// # Examples
 /// ```
 /// use crypto::hs1::toStr;
 ///
-/// let s1: Vec<u8> = toStr(4, &3).unwrap();
+/// let s1: Vec<u8> = toStr(4, &3);
 /// assert!(vec![0, 0, 0, 3] == s1);
 ///
-/// let s2: Vec<u8> = toStr(4, &256).unwrap();
+/// let s2: Vec<u8> = toStr(4, &256);
 /// assert!(vec![0, 0, 1, 0] == s2);
 ///
-/// let s3: Vec<u8> = toStr(4, &4294967295).unwrap();
+/// let s3: Vec<u8> = toStr(4, &4294967295);
 /// assert!(vec![255, 255, 255, 255] == s3);
 /// ```
-pub fn toStr<'a>(n: usize, x: &'a usize) -> Result<Vec<u8>, ConversionError> {
-    let s: String = format!("{:b}", x.to_le());
+pub fn toStr<'a>(n: isize, x: &'a usize) -> Vec<u8> {
+    let binary:       String  = format!("{:b}", x.to_le());
+    let len:          isize = n * 8isize - binary.len() as isize;
+    let mut bits:    BitVec = BitVec::from_fn(binary.len(), |i| { binary.char_at(i) == '1' });
+    let mut padding: BitVec;
 
-    if n * 8 - s.len() > usize::max_value() {
-        return Err(ConversionError::IntToStr);
+    if len > 0 {
+        padding = BitVec::from_elem(len as usize, false);
+        padding.append(&mut bits);
+        return padding.to_bytes();
+    } else {
+        return bits.to_bytes();
     }
-
-    let mut p: BitVec = BitVec::from_elem(n * 8 - s.len(), false);
-    let mut b: BitVec = BitVec::from_fn(s.len(), |i| { s.char_at(i) == '1' });
-    
-    p.append(&mut b);
-    Ok(p.to_bytes())
 }
 
 /// Returns a vector of integers obtained by breaking `S` into 4-byte chunks and little-endian
@@ -767,32 +768,32 @@ mod tests {
     #[test]
     fn test_hs1_toStr_toInts4_3() {
         let orig: usize = 3;
-        assert_eq!(toInts4(&toStr(4, &orig).unwrap()).unwrap()[0], orig as u32);
+        assert_eq!(toInts4(&toStr(4, &orig)).unwrap()[0], orig as u32);
     }
     #[test]
     fn test_hs1_toStr_toInts4_256() {
         let orig: usize = 256;
-        assert_eq!(toInts4(&toStr(4, &orig).unwrap()).unwrap()[0], orig as u32);
+        assert_eq!(toInts4(&toStr(4, &orig)).unwrap()[0], orig as u32);
     }
     #[test]
     fn test_hs1_toStr_toInts4_4294967295() {
         let orig: usize = 4294967295;
-        assert_eq!(toInts4(&toStr(4, &orig).unwrap()).unwrap()[0], orig as u32);
+        assert_eq!(toInts4(&toStr(4, &orig)).unwrap()[0], orig as u32);
     }
     #[test]
     fn test_hs1_toStr_toInts8_3() {
         let orig: usize = 3;
-        assert_eq!(toInts8(&toStr(8, &orig).unwrap()).unwrap()[0], orig as u64);
+        assert_eq!(toInts8(&toStr(8, &orig)).unwrap()[0], orig as u64);
     }
     #[test]
     fn test_hs1_toStr_toInts8_256() {
         let orig: usize = 256;
-        assert_eq!(toInts8(&toStr(8, &orig).unwrap()).unwrap()[0], orig as u64);
+        assert_eq!(toInts8(&toStr(8, &orig)).unwrap()[0], orig as u64);
     }
     #[test]
     fn test_hs1_toStr_toInts8_18446744073709551615() {
         let orig: usize = 18446744073709551615;
-        assert_eq!(toInts8(&toStr(8, &orig).unwrap()).unwrap()[0], orig as u64);
+        assert_eq!(toInts8(&toStr(8, &orig)).unwrap()[0], orig as u64);
     }
 
     #[test]
