@@ -182,7 +182,7 @@ pub trait Decrypt {
 }
 
 impl HS1 {
-    /// Initialise a new HS1 cipher and it's underlying ChaCha cipher and state.
+    /// Initialise a new HS1 cipher with the chosen `parameters`.
     pub fn new(parameters: Parameters) -> HS1 {
         HS1{ parameters: parameters }
     }
