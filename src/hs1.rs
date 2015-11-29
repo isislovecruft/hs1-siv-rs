@@ -83,6 +83,11 @@ impl PartialEq for Key {
     }
 }
 
+pub type Ciphertext     = Vec<u8>;
+pub type Authenticator  = Vec<u8>;
+pub type Plaintext      = Vec<u8>;
+pub type AssociatedData = Vec<u8>;
+
 /// Parameters for initialising HS1-SIV with established levels of varying security and efficiency.
 ///
 /// There are four parameters used throughout this specification: `b`, `t`, `r`, and `l`.
@@ -172,13 +177,14 @@ pub trait Hash {
 
 /// Encrypt the message `M` using the HS1-SIV authenticated encryption cipher.
 pub trait Encrypt {
-    fn encrypt(&self, K: &[u8], M: &String, A: &String, N: &Vec<u8>) -> (String, String);
+    fn encrypt(&self, K: &[u8], M: &Plaintext, A: &AssociatedData, N: &Vec<u8>)
+               -> (Ciphertext, Authenticator);
 }
 
 /// Decrypt (and authenticate) the ciphertext `C` using the HS1-SIV authenticated encryption cipher.
 pub trait Decrypt {
-    fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
-               -> Result<String, Error>;
+    fn decrypt(&self, K: &[u8], T: &Authenticator, C: &Ciphertext, A: &AssociatedData, N: &Vec<u8>)
+               -> Result<Plaintext, Error>;
 }
 
 impl HS1 {
@@ -500,7 +506,8 @@ impl Hash for HS1 {
 /// 3. T = HS1 {b,t,r} (k, M', N, l)
 /// 4. C = M ⊕ HS1 {b,t,r} (k, T, N, 64 + |M|)[64, |M|]
 impl Encrypt for HS1 {
-    fn encrypt(&self, K: &[u8], M: &String, A: &String, N: &Vec<u8>) -> (String, String) {
+    fn encrypt(&self, K: &[u8], M: &Plaintext, A: &AssociatedData, N: &Vec<u8>)
+               -> (Ciphertext, Authenticator) {
         assert!(K.len() <= 32);
         assert!(M.len() <  2usize.pow(64));
         assert!(A.len() <  2usize.pow(64));
@@ -560,9 +567,8 @@ impl Encrypt for HS1 {
 /// 5. if (T = T') then return M
 /// 6. else return AuthenticationError
 impl Decrypt for HS1 {
-    fn decrypt(&self, K: &[u8], T: &String, C: &String, A: &String, N: &Vec<u8>)
-               -> Result<String, Error> {
-        assert!(K.len() <= 32);
+    fn decrypt(&self, K: &[u8], T: &Authenticator, C: &Ciphertext, A: &AssociatedData, N: &Vec<u8>)
+               -> Result<Plaintext, Error> {
         assert!(T.len() == self.parameters.l as usize);
         assert!(C.len() < 2usize.pow(64));
         assert!(A.len() <  2usize.pow(64));
