@@ -672,13 +672,6 @@ fn pad(multiple: usize, input: &Vec<u8>) -> Vec<u8> {
     padded
 }
 
-/// Utility for using pad() on a std::str::String.
-fn padStr(multiple: usize, input: &String) -> String {
-    let mut i: Vec<u8> = Vec::with_capacity(input.len());
-    i.extend(input.as_bytes());
-    String::from_utf8(pad(multiple, &i)).unwrap()
-}
-
 /// `toStr(n, x)` is the `n`-byte unsigned little-endian binary representation of integer `x`.
 ///
 /// # Examples
