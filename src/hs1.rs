@@ -25,7 +25,7 @@
 
 use std;
 use std::collections::BitVec;
-use std::iter::{Extend, repeat};
+use std::iter::repeat;
 use std::result::Result;
 use std::slice::Chunks;
 use std::vec::Vec;
