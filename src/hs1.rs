@@ -341,11 +341,11 @@ impl Subkeygen for HS1 {
 /// # use crypto::hs1::{HS1, Subkeygen, PRF, HS1_SIV_HI, Key};
 /// let hs1: HS1     = HS1::new(HS1_SIV_HI);
 /// let k:   Key     = hs1.subkeygen(&([0x01; 32])[..]);
-/// let M:   String  = String::from("foo bar baz qux");
+/// let M:   Vec<u8> = String::from("foo bar baz qux").into_bytes();
 /// let N:   Vec<u8> = vec![0u8; 12];
 /// let y:   i64     = 32;
 ///
-/// assert_eq!(hs1.prf(&k, &M.to_bytes(), &N, y),
+/// assert_eq!(hs1.prf(&k, &M, &N, y),
 ///            vec![094, 241, 144, 091, 056, 120, 029, 023,
 ///                 253, 066, 103, 066, 189, 033, 247, 150,
 ///                 038, 086, 209, 237, 173, 164, 140, 048,
