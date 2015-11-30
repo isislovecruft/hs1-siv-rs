@@ -968,4 +968,15 @@ mod tests {
         let hash: Vec<u8> = hs1.hash(&key.N, &32u64, &key.A, &msg());
         assert_eq!(&hash[..], [149, 252, 064, 013])
     }
+
+    #[test]
+    fn test_hs1_siv_lo_encrypt() {
+        let hs1: HS1 = HS1::new(HS1_SIV_LO);
+        let ca: (Vec<u8>, Vec<u8>) = hs1.encrypt(&KEY_32_BYTES[..], &msg(), &associated_data(), &nonce());
+        // XXX these might be wrong because PRF
+        assert_eq!(ca.0, vec![49, 126, 200, 176, 47, 149, 122, 127]); // authentication data
+        assert_eq!(ca.1, vec![101, 22, 173, 144, 76, 231, 21, 8, 125,
+                              201, 146, 17, 137, 73, 143, 212, 145, 250,
+                              38, 3, 89, 176, 163, 47, 89, 88, 159]); // encrypted data
+    }
 }
