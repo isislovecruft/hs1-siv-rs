@@ -571,8 +571,6 @@ impl Decrypt for HS1 {
     fn decrypt(&self, K: &[u8], T: &Authenticator, C: &Ciphertext, A: &AssociatedData, N: &Vec<u8>)
                -> Result<Plaintext, Error> {
         assert!(T.len() == self.parameters.l as usize);
-        assert!(C.len() < 2usize.pow(64));
-        assert!(A.len() <  2usize.pow(64));
         assert!(N.len() == 12);
 
         let k:       Key = self.subkeygen(&K);
