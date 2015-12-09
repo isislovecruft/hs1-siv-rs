@@ -510,17 +510,16 @@ impl Encrypt for HS1 {
                -> (Ciphertext, Authenticator) {
         assert!(N.len() == 12);
 
-        let k:       Key = self.subkeygen(&K);
-        let m:       String;
-        let C:       String;
-        let T:       String;
-        let t:       Vec<u8>;
-        let mut out: Vec<u8> = repeat(0).take(M.len()).collect();
+        let k:     Key;
+        let m:     Vec<u8>;
+        let mut T: Vec<u8>;
+        let C:     Vec<u8>;
 
-        m = [padStr(16, &A),
-             padStr(16, &M),
-             String::from_utf8(toStr(8, &A.len())).unwrap(), // XXX should these be vectors instead?
-             String::from_utf8(toStr(8, &M.len())).unwrap()].concat();
+        k = self.subkeygen(&take32(K));
+        m = [pad(16, &A),
+             pad(16, &M),
+             toStr(8, &A.len()),
+             toStr(8, &M.len())].concat();
 
         // XXX_QUESTION: Here we are supposed to use `l` as the final parameter to prf(). However,
         // because y must equal 32 — as noted in a XXX_QUESTION above in prf() — we can only do this
@@ -528,8 +527,13 @@ impl Encrypt for HS1 {
 
         //T = self.prf(&k, &m, &N, self.parameters.l as i64);
         T = self.prf(&k, &m, &N, 32i64);
-        xor_keystream(&mut out[..], M, &self.prf(&k, &T, &N, (64 + M.len()) as i64)[..]);
-        C = String::from_utf8(out.to_vec()).unwrap();
+        T.truncate(self.parameters.l as usize);
+
+        //let intermediate: Vec<u8> = self.prf(&k, &T, &N, ((64 + M.len()) as i64));
+        let intermediate: &[u8] = &self.prf(&k, &T, &N, 32i64);
+        let mut output: Vec<u8> = repeat(0).take(intermediate.len()).collect();
+        xor_keystream(&mut output[..], &pad(intermediate.len(), &M)[..], intermediate);
+        C = output[.. M.len()].to_vec();
 
         assert_eq!(T.len(), self.parameters.l as usize);
         assert_eq!(C.len(), M.len());
