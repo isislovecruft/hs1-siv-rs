@@ -508,9 +508,6 @@ impl Hash for HS1 {
 impl Encrypt for HS1 {
     fn encrypt(&self, K: &[u8], M: &Plaintext, A: &AssociatedData, N: &Vec<u8>)
                -> (Ciphertext, Authenticator) {
-        assert!(K.len() <= 32);
-        assert!(M.len() <  2usize.pow(64));
-        assert!(A.len() <  2usize.pow(64));
         assert!(N.len() == 12);
 
         let k:       Key = self.subkeygen(&K);
