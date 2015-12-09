@@ -573,22 +573,28 @@ impl Decrypt for HS1 {
         assert!(T.len() == self.parameters.l as usize);
         assert!(N.len() == 12);
 
-        let k:       Key = self.subkeygen(&K);
-        let M:       String;
-        let m:       String;
-        let t:       String;
+        let k:       Key;
+        let M:       Vec<u8>;
+        let m:       Vec<u8>;
+        let t:       Vec<u8>;
         let mut out: Vec<u8> = repeat(0).take(C.len()).collect();
 
-        xor_keystream(&mut out[..], &C.as_bytes(),
+        k = self.subkeygen(&take32(K));
+
+        // XXX_QUESTION: Here we are supposed to use `64 + C.len()` as the final parameter to prf(),
+        // and then truncate the output to bytes between `[64 .. C.len()]`. However, because the `y`
+        // parameter to prf() must equal 32 — as noted in a XXX_QUESTION above in prf() — we can't
+        // do this.
+        xor_keystream(&mut out[..], &C,
                       &self.prf(&k, &T, N, (64 + C.len()) as i64)[64 .. C.len()]);
-        M = String::from_utf8(out.to_vec()).unwrap();
-        m = [padStr(16, &A),
-             padStr(16, &M),
-             String::from_utf8(toStr(8, &A.len())).unwrap(),
-             String::from_utf8(toStr(8, &M.len())).unwrap()].concat();
+        M = out.to_vec();
+        m = [pad(16, &A),
+             pad(16, &M),
+             toStr(8, &A.len()),
+             toStr(8, &M.len())].concat();
         t = self.prf(&k, &m, N, self.parameters.l as i64);
 
-        if *T == *t { Ok(M) } else { Err(Error::AuthenticationError) }
+        if *T == t { Ok(M) } else { Err(Error::AuthenticationError) }
     }
 }
 
@@ -970,5 +976,20 @@ mod tests {
         assert_eq!(ca.1, vec![101, 22, 173, 144, 76, 231, 21, 8, 125,
                               201, 146, 17, 137, 73, 143, 212, 145, 250,
                               38, 3, 89, 176, 163, 47, 89, 88, 159]); // encrypted data
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed")]
+    fn test_hs1_siv_lo_decrypt() {
+        let hs1: HS1 = HS1::new(HS1_SIV_LO);
+
+        // XXX these are probably wrong because of the problems within the PRF() function's specification
+        let a: Vec<u8> = vec![49, 126, 200, 176, 47, 149, 122, 127];
+        let e: Vec<u8> = vec![101, 22, 173, 144, 76, 231, 21, 8, 125,
+                              201, 146, 17, 137, 73, 143, 212, 145, 250,
+                              38, 3, 89, 176, 163, 47, 89, 88, 159];
+        let d: Result<Plaintext, Error> = hs1.decrypt(&KEY_32_BYTES[..], &a, &e,
+                                                      &associated_data(), &nonce());
+        assert_eq!(&d.unwrap()[..], &msg()[..]);
     }
 }
