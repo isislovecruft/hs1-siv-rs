@@ -377,7 +377,7 @@ impl PRF for HS1 {
 
             // Concatenate A_i (either 4 or 8 bytes) into the hashed input for combination with the
             // keystream:
-            let hashed = self.hash(&n, &p, &a, &M.clone().into_bytes());
+            let hashed = self.hash(&n, &p, &a, &M.clone());
             for byte in hashed.iter() {
                 A.push(*byte);
             }
