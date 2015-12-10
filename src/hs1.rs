@@ -353,7 +353,6 @@ impl Subkeygen for HS1 {
 /// ```
 impl PRF for HS1 {
     fn prf(&self, k: &Key, M: &Vec<u8>, N: &Vec<u8>, y: i64) -> Vec<u8> {
-        assert_eq!(k.S.len(), 32);
         assert_eq!(N.len(), 12);
         assert!(0i64 < y);
         assert!(y < 2i64.pow(38));
