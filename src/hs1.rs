@@ -4,7 +4,7 @@
 //
 // Authors: Isis Agora Lovecruft <isis@en.ciph.re> 0xA3ADB67A2CDB8B35
 
-//! A reference implementation of [the HS1-SIV authenticated-encryption cipher, version 2]().
+//! A reference implementation of [the HS1-SIV authenticated-encryption cipher, version 2](competitions.cr.yp.to/round2/hs1sivv2.pdf).
 //!
 //! WARNING: ***REFERENCE IMPLEMENTATION*** MEANS ***FOR REFERENCE ONLY***.
 //!
