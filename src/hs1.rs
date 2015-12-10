@@ -361,7 +361,7 @@ impl PRF for HS1 {
         let mut key: Vec<u8> = repeat(0).take(y as usize).collect();
         let mut Y:   Vec<u8> = repeat(0).take(y as usize).collect();
 
-        // XXX_QUESTION: There probably a typo here at kA[3i, 3], since, when i == i, then the
+        // XXX_QUESTION: There's probably a typo here at kA[3i, 3], since, when i == i, then the
         // subarray will be empty.  Perhaps we're supposed to do kA[3i, 3i+3]?
 
         // XXX_QUESTION: When i >= 5, we don't take anything from kN, because len(kN) == 36 and
