@@ -15,6 +15,7 @@ extern crate rustc_serialize as serialize;
 extern crate time;
 extern crate libc;
 extern crate num;
+extern crate bit_vec;
 
 #[cfg(all(test, feature = "with-bench"))]
 extern crate test;

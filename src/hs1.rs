@@ -24,7 +24,6 @@
 #![allow(non_snake_case)]
 
 use std;
-use std::collections::BitVec;
 use std::iter::repeat;
 use std::result::Result;
 use std::slice::Chunks;
@@ -32,6 +31,8 @@ use std::vec::Vec;
 
 pub use num::bigint::{BigInt, ToBigInt};
 pub use num::traits::{FromPrimitive, ToPrimitive};
+
+use bit_vec::BitVec;
 
 use chacha20::ChaCha20;
 use cryptoutil::xor_keystream;
@@ -699,7 +700,7 @@ pub fn toStr<'a>(n: isize, x: &'a usize) -> Vec<u8> {
 
     if len > 0 {
         padding = BitVec::from_elem(len as usize, false);
-        padding.append(&mut bits);
+        padding.extend((&mut bits).iter());
         return padding.to_bytes();
     } else {
         return bits.to_bytes();
