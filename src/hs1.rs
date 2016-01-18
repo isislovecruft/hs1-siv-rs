@@ -347,10 +347,10 @@ impl Subkeygen for HS1 {
 /// let y:   i64     = 32;
 ///
 /// assert_eq!(hs1.prf(&k, &M, &N, y),
-///            vec![094, 241, 144, 091, 056, 120, 029, 023,
-///                 253, 066, 103, 066, 189, 033, 247, 150,
-///                 038, 086, 209, 237, 173, 164, 140, 048,
-///                 092, 230, 175, 079, 064, 119, 249, 143])
+///            vec![237, 246, 074, 119, 100, 150, 062, 007,
+///                 234, 091, 007, 103, 062, 039, 173, 017,
+///                 126, 119, 070, 060, 009, 171, 131, 157,
+///                 011, 191, 046, 097, 226, 150, 213, 037])
 /// ```
 impl PRF for HS1 {
     fn prf(&self, k: &Key, M: &Vec<u8>, N: &Vec<u8>, y: i64) -> Vec<u8> {
@@ -358,6 +358,7 @@ impl PRF for HS1 {
         assert!(0i64 < y);
         assert!(y < 2i64.pow(38));
 
+        let input:   Vec<u8>;
         let mut A:   Vec<u8> = Vec::with_capacity(self.parameters.t as usize);
         let mut key: Vec<u8> = repeat(0).take(y as usize).collect();
         let mut Y:   Vec<u8> = repeat(0).take(y as usize).collect();
@@ -375,16 +376,17 @@ impl PRF for HS1 {
                 A.push(*byte);
             }
         }
-        // XXX_QUESTION: If we pad the hash output to 32 bytes, and then process said padded hash
-        // output with ChaCha into a vector of y bytes, this will *always* fail when y != 32,
-        // because ChaCha expects the input and output vectors to have the same length.  Should y
-        // always be 32?  Or should we be doing ChaCha with a correctly sized vector and *then*
-        // truncating/padding to y number of bytes?  Or pad twice (i.e. pad once to 32 bytes in
-        // order to xor into the keystream, and then pad/trucate again to match the output vector)?
-
         // 2. `Y   = ChaCha[r](pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)`
         xor_keystream(&mut key, &pad(32, &A), &k.S[..]);
-        ChaCha20::new(&k.S, &N[..], Some(self.parameters.r as i8)).process(&key[..], &mut Y[..]);
+        // "HS1 uses RFC 7539's chacha interface: https://tools.ietf.org/html/rfc7539
+        // When the last parameter in a chacha call is n bytes, we have chacha produce n bytes and
+        // then xor the last parameter with the chacha output. By having the last parameter be 0^y,
+        // I am essentially having chacha produce y bytes." —Ted Krovetz
+        //
+        // So here, rather than xoring with a string of y 0-bytes, we'll just pad the key with
+        // 0-bytes to a length of y to produce the input.
+        input = pad(y as usize, &key);
+        ChaCha20::new(&key[..], &N[..], Some(self.parameters.r as i8)).process(&input[..], &mut Y[..]);;
         Y.to_vec()
     }
 }
@@ -901,10 +903,10 @@ mod tests {
         let key: Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
         let prf: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
         assert_eq!(&prf[..],
-                   [049, 126, 200, 176, 047, 149, 122, 127,
-                    093, 175, 254, 120, 236, 058, 175, 181,
-                    229, 218, 075, 106, 061, 222, 202, 072,
-                    049, 044, 177, 204, 157, 043, 149, 155])
+                   [058, 001, 229, 090, 120, 241, 118, 144,
+                    186, 065, 227, 192, 238, 200, 210, 203,
+                    070, 140, 015, 071, 191, 074, 187, 111,
+                    212, 056, 030, 075, 070, 240, 088, 220])
     }
 
     #[test]
@@ -913,10 +915,10 @@ mod tests {
         let key: Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
         let prf: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
         assert_eq!(&prf[..],
-                   [087, 219, 214, 244, 150, 015, 254, 233,
-                    191, 037, 001, 157, 199, 149, 027, 014,
-                    079, 142, 009, 219, 173, 035, 242, 139,
-                    008, 242, 087, 188, 218, 213, 001, 030])
+                   [065, 219, 017, 230, 081, 068, 018, 106,
+                    048, 003, 101, 139, 061, 088, 228, 135,
+                    072, 007, 110, 112, 065, 221, 053, 051,
+                    171, 217, 23, 204, 201, 224, 128, 180])
     }
 
     #[test]
@@ -928,10 +930,10 @@ mod tests {
         let punk_rock_forever: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
 
         assert_eq!(&punk_rock_forever[..],
-                   [130, 117, 220, 062, 161, 067, 098, 123,
-                    054, 165, 149, 123, 006, 113, 049, 186,
-                    174, 095, 063, 143, 022, 047, 247, 121,
-                    027, 017, 145, 002, 210, 154, 241, 235])
+                   [056, 093, 194, 039, 087, 139, 212, 133,
+                    177, 244, 163, 038, 163, 242, 243, 035,
+                    179, 106, 044, 083, 008, 161, 234, 089,
+                    172, 050, 018, 240, 155, 118, 19, 143])
     }
 
     #[test]
@@ -962,11 +964,11 @@ mod tests {
     fn test_hs1_siv_lo_encrypt() {
         let hs1: HS1 = HS1::new(HS1_SIV_LO);
         let ca: (Vec<u8>, Vec<u8>) = hs1.encrypt(&KEY_32_BYTES[..], &msg(), &associated_data(), &nonce());
-        // XXX these might be wrong because PRF
-        assert_eq!(ca.0, vec![49, 126, 200, 176, 47, 149, 122, 127]); // authentication data
-        assert_eq!(ca.1, vec![101, 22, 173, 144, 76, 231, 21, 8, 125,
-                              201, 146, 17, 137, 73, 143, 212, 145, 250,
-                              38, 3, 89, 176, 163, 47, 89, 88, 159]); // encrypted data
+
+        assert_eq!(ca.0, vec![058, 001, 229, 090, 120, 241, 118, 144]); // authentication data
+        assert_eq!(ca.1, vec![110, 105, 128, 122, 027, 131, 025, 231, 154,
+                              039, 143, 169, 139, 187, 242, 170, 050, 172,
+                              098, 046, 219, 036, 210, 008, 188, 076, 048]); // encrypted data
     }
 
     #[test]
