@@ -375,8 +375,6 @@ impl PRF for HS1 {
                 A.push(*byte);
             }
         }
-        // XXX_QUESTION: The equation of step #2 in the paper appears to be missing a parenthesis.
-
         // XXX_QUESTION: If we pad the hash output to 32 bytes, and then process said padded hash
         // output with ChaCha into a vector of y bytes, this will *always* fail when y != 32,
         // because ChaCha expects the input and output vectors to have the same length.  Should y
