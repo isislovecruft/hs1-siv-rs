@@ -347,10 +347,10 @@ impl Subkeygen for HS1 {
 /// let y:   i64     = 32;
 ///
 /// assert_eq!(hs1.prf(&k, &M, &N, y),
-///            vec![237, 246, 074, 119, 100, 150, 062, 007,
-///                 234, 091, 007, 103, 062, 039, 173, 017,
-///                 126, 119, 070, 060, 009, 171, 131, 157,
-///                 011, 191, 046, 097, 226, 150, 213, 037])
+///            vec![040, 090, 065, 216, 192, 028, 222, 229,
+///                 130, 131, 243, 152, 171, 025, 152, 162,
+///                 251, 238, 052, 245, 238, 146, 109, 036,
+///                 222, 193, 077, 142, 232, 252, 236, 055])
 /// ```
 impl PRF for HS1 {
     fn prf(&self, k: &Key, M: &Vec<u8>, N: &Vec<u8>, y: i64) -> Vec<u8> {
@@ -358,10 +358,17 @@ impl PRF for HS1 {
         assert!(0i64 < y);
         assert!(y < 2i64.pow(38));
 
-        let input:   Vec<u8>;
+        // "HS1 uses RFC 7539's chacha interface: https://tools.ietf.org/html/rfc7539
+        // When the last parameter in a chacha call is n bytes, we have chacha produce n bytes and
+        // then xor the last parameter with the chacha output. By having the last parameter be 0^y,
+        // I am essentially having chacha produce y bytes." —Ted Krovetz
+        //
+        // So here, rather than xoring with a string of y 0-bytes, we'll just pad the key with
+        // 0-bytes to a length of y to produce the input.
         let mut A:   Vec<u8> = Vec::with_capacity(self.parameters.t as usize);
-        let mut key: Vec<u8> = repeat(0).take(y as usize).collect();
-        let mut Y:   Vec<u8> = repeat(0).take(y as usize).collect();
+        let mut key: Vec<u8> = repeat(0).take(32 as usize).collect();
+        let mut Y:   Vec<u8> = repeat(0).take(y  as usize).collect();
+        let input:   Vec<u8> = repeat(0).take(y  as usize).collect();
 
         // 1. `A_i = HS1-Hash[b,t](kN[4i, b/4], kP[i], kA[3i, 3], M) for each 0 ≤ i < t`
         for i in 0 .. self.parameters.t {
@@ -378,15 +385,7 @@ impl PRF for HS1 {
         }
         // 2. `Y   = ChaCha[r](pad(32, A_0 || A_1 || … || A_(t-1)) ⊕ kS), 0, N, 0^y)`
         xor_keystream(&mut key, &pad(32, &A), &k.S[..]);
-        // "HS1 uses RFC 7539's chacha interface: https://tools.ietf.org/html/rfc7539
-        // When the last parameter in a chacha call is n bytes, we have chacha produce n bytes and
-        // then xor the last parameter with the chacha output. By having the last parameter be 0^y,
-        // I am essentially having chacha produce y bytes." —Ted Krovetz
-        //
-        // So here, rather than xoring with a string of y 0-bytes, we'll just pad the key with
-        // 0-bytes to a length of y to produce the input.
-        input = pad(y as usize, &key);
-        ChaCha20::new(&key[..], &N[..], Some(self.parameters.r as i8)).process(&input[..], &mut Y[..]);;
+        ChaCha20::new(&key[..], &N[..], Some(self.parameters.r as i8)).process(&input[..], &mut Y[..]);
         Y.to_vec()
     }
 }
@@ -508,25 +507,19 @@ impl Encrypt for HS1 {
         let mut T: Vec<u8>;
         let C:     Vec<u8>;
 
-        k = self.subkeygen(&take32(K));
+        k = self.subkeygen(&take32(K));  // OPTIMISE: maybe don't need take32()
         m = [pad(16, &A),
              pad(16, &M),
              toStr(8, &A.len()),
              toStr(8, &M.len())].concat();
 
-        // XXX_QUESTION: Here we are supposed to use `l` as the final parameter to prf(). However,
-        // because y must equal 32 — as noted in a XXX_QUESTION above in prf() — we can only do this
-        // when using the HS1_SIV_HI parameter set.
-
-        //T = self.prf(&k, &m, &N, self.parameters.l as i64);
-        T = self.prf(&k, &m, &N, 32i64);
+        T = self.prf(&k, &m, &N, self.parameters.l as i64);
         T.truncate(self.parameters.l as usize);
 
-        //let intermediate: Vec<u8> = self.prf(&k, &T, &N, ((64 + M.len()) as i64));
-        let intermediate: &[u8] = &self.prf(&k, &T, &N, 32i64);
+        let intermediate: &[u8] = &self.prf(&k, &T, &N, (64 + M.len()) as i64);
         let mut output: Vec<u8> = repeat(0).take(intermediate.len()).collect();
         xor_keystream(&mut output[..], &pad(intermediate.len(), &M)[..], intermediate);
-        C = output[.. M.len()].to_vec();
+        C = output[64 .. 64 + M.len()].to_vec();
 
         assert_eq!(T.len(), self.parameters.l as usize);
         assert_eq!(C.len(), M.len());
@@ -903,10 +896,10 @@ mod tests {
         let key: Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
         let prf: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
         assert_eq!(&prf[..],
-                   [058, 001, 229, 090, 120, 241, 118, 144,
-                    186, 065, 227, 192, 238, 200, 210, 203,
-                    070, 140, 015, 071, 191, 074, 187, 111,
-                    212, 056, 030, 075, 070, 240, 088, 220])
+                   [047, 018, 134, 029, 115, 204, 003, 173,
+                    153, 037, 060, 052, 019, 085, 232, 126,
+                    198, 134, 077, 036, 161, 069, 154, 062,
+                    145, 144, 097, 236, 171, 003, 189, 145])
     }
 
     #[test]
@@ -915,10 +908,10 @@ mod tests {
         let key: Key     = hs1.subkeygen(&KEY_32_BYTES[..]);
         let prf: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
         assert_eq!(&prf[..],
-                   [065, 219, 017, 230, 081, 068, 018, 106,
-                    048, 003, 101, 139, 061, 088, 228, 135,
-                    072, 007, 110, 112, 065, 221, 053, 051,
-                    171, 217, 23, 204, 201, 224, 128, 180])
+                   [101, 236, 097, 169, 244, 020, 011, 142,
+                    225, 180, 192, 190, 069, 018, 089, 229,
+                    071, 008, 179, 156, 122, 091, 115, 236,
+                    213, 101, 180, 231, 253, 200, 083, 062])
     }
 
     #[test]
@@ -930,10 +923,10 @@ mod tests {
         let punk_rock_forever: Vec<u8> = hs1.prf(&key, &msg(), &nonce(), 32i64);
 
         assert_eq!(&punk_rock_forever[..],
-                   [056, 093, 194, 039, 087, 139, 212, 133,
-                    177, 244, 163, 038, 163, 242, 243, 035,
-                    179, 106, 044, 083, 008, 161, 234, 089,
-                    172, 050, 018, 240, 155, 118, 19, 143])
+                   [036, 015, 088, 013, 151, 193, 179, 129,
+                    118, 223, 064, 211, 223, 156, 223, 218,
+                    166, 200, 152, 151, 212, 214, 239, 251,
+                    120, 107, 008, 159, 076, 118, 174, 17])
     }
 
     #[test]
@@ -965,10 +958,36 @@ mod tests {
         let hs1: HS1 = HS1::new(HS1_SIV_LO);
         let ca: (Vec<u8>, Vec<u8>) = hs1.encrypt(&KEY_32_BYTES[..], &msg(), &associated_data(), &nonce());
 
-        assert_eq!(ca.0, vec![058, 001, 229, 090, 120, 241, 118, 144]); // authentication data
-        assert_eq!(ca.1, vec![110, 105, 128, 122, 027, 131, 025, 231, 154,
-                              039, 143, 169, 139, 187, 242, 170, 050, 172,
-                              098, 046, 219, 036, 210, 008, 188, 076, 048]); // encrypted data
+        assert_eq!(ca.0, vec![047, 018, 134, 029, 115, 204, 003, 173]); // authentication data
+        assert_eq!(ca.1, vec![052, 224, 254, 195, 022, 240, 040, 202, 064,
+                              099, 103, 229, 032, 098, 174, 058, 242, 235,
+                              048, 081, 171, 165, 120, 133, 035, 113, 073]); // encrypted data
+    }
+
+    #[test]
+    fn test_hs1_siv_encrypt() {
+        let hs1: HS1 = HS1::new(HS1_SIV);
+        let ca: (Vec<u8>, Vec<u8>) = hs1.encrypt(&KEY_32_BYTES[..], &msg(), &associated_data(), &nonce());
+
+        assert_eq!(ca.0, vec![101, 236, 097, 169, 244, 020, 011, 142,
+                              225, 180, 192, 190, 069, 018, 089, 229]);
+        assert_eq!(ca.1, vec![160, 214, 124, 208, 100, 032, 204, 068, 225,
+                              066, 174, 027, 129, 105, 253, 027, 124, 110,
+                              042, 174, 102, 111, 124, 198, 191, 192, 238]);
+    }
+
+    #[test]
+    fn test_hs1_siv_hi_encrypt() {
+        let hs1: HS1 = HS1::new(HS1_SIV_HI);
+        let ca: (Vec<u8>, Vec<u8>) = hs1.encrypt(&KEY_32_BYTES[..], &msg(), &associated_data(), &nonce());
+
+        assert_eq!(ca.0, vec![036, 015, 088, 013, 151, 193, 179, 129,
+                              118, 223, 064, 211, 223, 156, 223, 218,
+                              166, 200, 152, 151, 212, 214, 239, 251,
+                              120, 107, 008, 159, 076, 118, 174, 017]);
+        assert_eq!(ca.1, vec![171, 153, 220, 057, 213, 086, 048, 015, 153,
+                              197, 154, 124, 153, 072, 212, 170, 008, 222,
+                              217, 221, 193, 000, 226, 172, 109, 242, 195]);
     }
 
     #[test]
