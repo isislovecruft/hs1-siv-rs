@@ -390,14 +390,6 @@ impl PRF for HS1 {
     }
 }
 
-// XXX_QUESTION: In step #5 of HS1-SIV-Hash, it is written `kP ^ (n-1)`, etc.  However in the notation
-// section of the paper, it says:
-//
-// > A string of k zero-bytes is represented 0^k.
-//
-// Are we supposed to raise the vector `kP` to the power of `(n-1)`, or are we supposed to take
-// that many bytes from the vector?
-
 /// The hash family HS1-Hash is `(1/2^(28) + l/b2^(60))-AU` for all `M` up to `l` bytes, when
 /// `k_N` and `k_P` are chosen randomly and `t ≤ 4`.
 ///
